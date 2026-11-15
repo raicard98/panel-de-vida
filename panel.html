@@ -317,6 +317,26 @@
   }
   .compra-anadir input:focus-visible, .compra-anadir select:focus-visible { outline: 2px solid var(--color); outline-offset: 1px; }
   .compra-anadir .error { grid-column: 1 / -1; }
+  /* Súper: distintivos con los colores de cada uno (dibujados aquí, no son los logos oficiales) */
+  .tiendas-elegir { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
+  .tiendas-elegir legend { float: left; margin-right: 4px; padding: 0; font-size: 14px; font-weight: 600; color: var(--texto-2); }
+  .tiendas-elegir label { position: relative; cursor: pointer; border-radius: 10px; padding: 3px; border: 2px solid transparent; opacity: .55; transition: opacity .15s; }
+  .tiendas-elegir input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+  .tiendas-elegir label:has(input:checked) { opacity: 1; border-color: var(--texto); }
+  .tiendas-elegir label:has(input:focus-visible) { outline: 2px solid var(--color); outline-offset: 2px; }
+  .tiendas-elegir label:hover { opacity: 1; }
+  .distintivo {
+    display: inline-flex; align-items: center; justify-content: center; height: 30px; padding: 0 12px; border-radius: 8px;
+    font-size: 15px; font-weight: 800; line-height: 1; white-space: nowrap; position: relative; overflow: hidden;
+  }
+  .distintivo--aldi { background: #001e78; color: #fff; letter-spacing: .06em; padding-bottom: 4px; }
+  .distintivo--aldi::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: linear-gradient(90deg, #f04b0c, #fb9f00, #ffe500); }
+  .distintivo--lidl { background: #0050aa; padding: 0 6px; }
+  .distintivo--lidl span { background: #fff000; color: #0050aa; border: 2px solid #e60a14; border-radius: 999px; padding: 3px 9px; font-size: 14px; }
+  .distintivo--mercadona { background: #00843d; color: #fff; letter-spacing: .04em; font-size: 13px; border-bottom: 4px solid #f39200; }
+  .distintivo--cualquiera { background: var(--tarjeta-2); color: var(--texto); font-weight: 700; border: 1px solid var(--linea); }
+  .tienda + .tienda { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--linea); }
+  .tienda-cabecera { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 14px; color: var(--texto-2); }
   .pasillos { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 24px; align-items: start; }
   .pasillo h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--texto-2); }
   .pasillo + .pasillo { margin-top: 0; }
@@ -497,6 +517,7 @@
         <h2 id="t-compra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>Lista de la compra</h2>
       </div>
       <form class="compra-anadir" id="compra-form" novalidate>
+        <fieldset class="tiendas-elegir" id="compra-tiendas"><legend>¿Dónde?</legend></fieldset>
         <input name="nombre" maxlength="60" placeholder="Añadir artículo, ej.: Leche" aria-label="Artículo">
         <input name="cantidad" maxlength="20" placeholder="Cantidad" aria-label="Cantidad (opcional)">
         <select name="seccion" aria-label="Sección del súper"></select>
@@ -601,16 +622,16 @@
         id, nombre, hechos: [...patron].flatMap((c, i) => (c === '1' ? [masDias(i - patron.length + 1)] : [])),
       })),
       compra: [
-        ['c1', 'Plátanos', '1 kg', 'Fruta y verdura', false],
-        ['c2', 'Tomates', '6', 'Fruta y verdura', false],
-        ['c3', 'Pechuga de pollo', '500 g', 'Carne y pescado', false],
-        ['c4', 'Leche', '6 l', 'Lácteos y huevos', false],
-        ['c5', 'Huevos', '12', 'Lácteos y huevos', true],
-        ['c6', 'Pan de molde', '', 'Panadería', false],
-        ['c7', 'Aceite de oliva', '1 l', 'Despensa', false],
-        ['c8', 'Arroz', '', 'Despensa', true],
-        ['c9', 'Detergente', '', 'Limpieza y hogar', false],
-      ].map(([id, nombre, cantidad, seccion, comprado]) => ({ id, nombre, cantidad, seccion, comprado })),
+        ['c1', 'Plátanos', '1 kg', 'Fruta y verdura', false, 'mercadona'],
+        ['c2', 'Tomates', '6', 'Fruta y verdura', false, 'mercadona'],
+        ['c3', 'Pechuga de pollo', '500 g', 'Carne y pescado', false, 'lidl'],
+        ['c4', 'Leche', '6 l', 'Lácteos y huevos', false, 'aldi'],
+        ['c5', 'Huevos', '12', 'Lácteos y huevos', true, 'aldi'],
+        ['c6', 'Pan de molde', '', 'Panadería', false, 'cualquiera'],
+        ['c7', 'Aceite de oliva', '1 l', 'Despensa', false, 'mercadona'],
+        ['c8', 'Arroz', '', 'Despensa', true, 'lidl'],
+        ['c9', 'Detergente', '', 'Limpieza y hogar', false, 'aldi'],
+      ].map(([id, nombre, cantidad, seccion, comprado, tienda]) => ({ id, nombre, cantidad, seccion, comprado, tienda })),
     };
   }
   function cargar() {
@@ -1093,6 +1114,25 @@
   const SECCIONES = ['Fruta y verdura', 'Carne y pescado', 'Lácteos y huevos', 'Panadería', 'Despensa', 'Congelados', 'Bebidas', 'Limpieza y hogar', 'Higiene', 'Otros'];
   const formCompra = document.getElementById('compra-form');
   formCompra.seccion.replaceChildren(...SECCIONES.map((s) => new Option(s, s)));
+
+  // Súper: cada artículo va a uno; lo que da igual dónde comprar, a «Cualquiera» (también lo antiguo sin súper)
+  const TIENDAS = [['aldi', 'Aldi'], ['lidl', 'Lidl'], ['mercadona', 'Mercadona'], ['cualquiera', 'Cualquiera']];
+  const tiendaDe = (a) => (TIENDAS.some(([id]) => id === a.tienda) ? a.tienda : 'cualquiera');
+  function distintivo(id) {
+    const nombre = TIENDAS.find(([t]) => t === id)[1];
+    const d = el('span', `distintivo distintivo--${id}`);
+    if (id === 'lidl') d.append(el('span', null, nombre));
+    else d.textContent = id === 'cualquiera' ? nombre : nombre.toUpperCase();
+    return d;
+  }
+  for (const [id, nombre] of TIENDAS) {
+    const etiqueta = el('label');
+    const radio = el('input');
+    radio.type = 'radio'; radio.name = 'tienda'; radio.value = id; radio.checked = id === 'cualquiera';
+    radio.setAttribute('aria-label', nombre);
+    etiqueta.append(radio, distintivo(id));
+    document.getElementById('compra-tiendas').append(etiqueta);
+  }
   formCompra.seccion.value = 'Otros';
 
   function filaArticulo(a) {
@@ -1120,17 +1160,27 @@
     resumen.append(el('strong', null, String(pendientes.length)), pendientes.length === 1 ? 'artículo por comprar' : 'artículos por comprar');
     caja.append(resumen);
 
-    // Agrupado por pasillos, en el orden del súper; lo comprado va al final
-    const pasillos = el('div', 'pasillos');
-    for (const s of SECCIONES) {
-      const deAqui = pendientes.filter((a) => (SECCIONES.includes(a.seccion) ? a.seccion : 'Otros') === s);
-      if (!deAqui.length) continue;
-      const bloque = el('div', 'pasillo');
-      const ul = el('ul', 'agenda-lista');
-      ul.append(...deAqui.map(filaArticulo));
-      bloque.append(el('h3', null, s), ul);
-      pasillos.append(bloque);
+    // Un bloque por súper y, dentro, por pasillos en el orden de la tienda; lo comprado va al final
+    for (const [tienda] of TIENDAS) {
+      const deTienda = pendientes.filter((a) => tiendaDe(a) === tienda);
+      if (!deTienda.length) continue;
+      const bloqueTienda = el('section', 'tienda');
+      const cabecera = el('div', 'tienda-cabecera');
+      cabecera.append(distintivo(tienda), deTienda.length === 1 ? '1 artículo' : `${deTienda.length} artículos`);
+      const pasillos = el('div', 'pasillos');
+      for (const s of SECCIONES) {
+        const deAqui = deTienda.filter((a) => (SECCIONES.includes(a.seccion) ? a.seccion : 'Otros') === s);
+        if (!deAqui.length) continue;
+        const bloque = el('div', 'pasillo');
+        const ul = el('ul', 'agenda-lista');
+        ul.append(...deAqui.map(filaArticulo));
+        bloque.append(el('h3', null, s), ul);
+        pasillos.append(bloque);
+      }
+      bloqueTienda.append(cabecera, pasillos);
+      caja.append(bloqueTienda);
     }
+    const pasillos = el('div', 'pasillos tienda');
     if (comprados.length) {
       const bloque = el('div', 'pasillo');
       const cabecera = el('div', 'comprados-cabecera');
@@ -1146,8 +1196,8 @@
       ul.append(...comprados.map(filaArticulo));
       bloque.append(cabecera, ul);
       pasillos.append(bloque);
+      caja.append(pasillos);
     }
-    caja.append(pasillos);
   }
 
   formCompra.addEventListener('submit', (e) => {
@@ -1158,8 +1208,9 @@
     error.hidden = true;
     // Si ya está en la lista (aunque esté comprado), se reactiva en vez de duplicarlo
     const ya = datos.compra.find((a) => a.nombre.toLowerCase() === nombre.toLowerCase());
-    if (ya) { ya.comprado = false; if (formCompra.cantidad.value.trim()) ya.cantidad = formCompra.cantidad.value.trim(); }
-    else datos.compra.push({ id: String(Date.now()), nombre, cantidad: formCompra.cantidad.value.trim(), seccion: formCompra.seccion.value, comprado: false });
+    const tienda = formCompra.tienda.value;
+    if (ya) { ya.comprado = false; ya.tienda = tienda; if (formCompra.cantidad.value.trim()) ya.cantidad = formCompra.cantidad.value.trim(); }
+    else datos.compra.push({ id: String(Date.now()), nombre, cantidad: formCompra.cantidad.value.trim(), seccion: formCompra.seccion.value, tienda, comprado: false });
     guardar(); pintarCompra();
     formCompra.nombre.value = ''; formCompra.cantidad.value = '';
     formCompra.nombre.focus(); // listo para el siguiente artículo; la sección se queda
