@@ -121,9 +121,44 @@
   /* Formularios */
   .formulario { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; background: var(--tarjeta-2); border-radius: 14px; }
   .formulario[hidden], .formulario label[hidden] { display: none; }
+  /* Importar movimientos del banco */
+  .importar-aviso { margin: 0 0 12px; font-size: 14px; color: var(--dinero); }
+  .importar-aviso.error { color: #ff6961; }
+  .importar {
+    --color: var(--dinero); width: min(760px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0;
+    display: flex; flex-direction: column; color: var(--texto); background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--radio);
+  }
+  .importar:not([open]) { display: none; }
+  .importar::backdrop { background: rgb(0 0 0 / .7); }
+  .importar h2 { margin: 0; padding: 18px 20px 4px; font-size: 19px; }
+  .importar-resumen { margin: 0; padding: 0 20px 12px; font-size: 14px; color: var(--texto-2); border-bottom: 1px solid var(--linea); }
+  .importar-lista { list-style: none; margin: 0; padding: 0 20px; }
+  .importar > .importar-lista { overflow-y: auto; flex: 1 1 auto; min-height: 120px; }
+  .importar-fila { display: grid; grid-template-columns: 1fr auto 170px; align-items: center; gap: 6px 12px; padding: 9px 0; border-top: 1px solid var(--linea); }
+  .importar-fila:first-child { border-top: 0; }
+  .importar-texto { min-width: 0; }
+  .importar-texto b { display: block; overflow-wrap: anywhere; }
+  .importar-texto span { display: block; font-size: 13px; color: var(--texto-2); }
+  .importar-importe { font-weight: 700; white-space: nowrap; }
+  .importar-importe.ingreso { color: var(--dinero); }
+  .importar-fila select {
+    font: inherit; font-size: 14px; color: var(--texto); background: var(--tarjeta-2); border: 1px solid var(--linea);
+    border-radius: 10px; padding: 7px 8px; min-width: 0; width: 100%; color-scheme: dark;
+  }
+  .importar-nocuentan { padding: 8px 20px 0; border-top: 1px solid var(--linea); max-height: 35dvh; overflow-y: auto; }
+  .importar-nocuentan summary { cursor: pointer; font-weight: 600; color: var(--texto-2); padding: 4px 0; }
+  .importar-nocuentan .importar-lista { padding: 0; }
+  .importar-nota { margin: 4px 0; font-size: 13px; color: var(--texto-2); }
+  .importar-pie { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--linea); }
+  @media (max-width: 600px) {
+    .importar { width: 100%; max-width: none; max-height: 100dvh; height: 100dvh; border-radius: 0; margin: 0; }
+    .importar-fila { grid-template-columns: 1fr auto; }
+    .importar-fila select { grid-column: 1 / -1; }
+  }
+
   /* Archivos */
-  .area-cabecera:has(.archivos-botones) { flex-wrap: wrap; row-gap: 4px; }
-  .archivos-botones { display: flex; gap: 14px; margin-left: -4px; }
+  .area-cabecera:has(.cabecera-botones) { flex-wrap: wrap; row-gap: 4px; }
+  .cabecera-botones { display: flex; gap: 14px; margin-left: -4px; }
   .archivos-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 14px; color: var(--texto-2); }
   .archivos-barra:empty { display: none; }
   .archivos-barra a.boton { text-decoration: none; overflow-wrap: anywhere; }
@@ -457,7 +492,11 @@
     <section class="area" style="--color: var(--dinero); --boton: #1a7f37" aria-labelledby="t-dinero">
       <div class="area-cabecera">
         <h2 id="t-dinero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 6.5A6.5 6.5 0 1 0 17 17.5M4 10h9M4 14h9"/></svg><span id="dinero-titulo">Dinero del mes</span></h2>
-        <button type="button" class="boton-texto" id="dinero-abrir" aria-expanded="false" aria-controls="dinero-form">Añadir</button>
+        <div class="cabecera-botones">
+          <button type="button" class="boton-texto" id="importar-abrir">Importar</button>
+          <button type="button" class="boton-texto" id="dinero-abrir" aria-expanded="false" aria-controls="dinero-form">Añadir</button>
+        </div>
+        <input type="file" id="importar-archivo" accept=".csb,.n43,.aeb,.txt" hidden>
       </div>
       <form class="formulario" id="dinero-form" hidden novalidate>
         <label>Concepto<input name="concepto" maxlength="60" placeholder="Ej.: Supermercado" required></label>
@@ -475,6 +514,7 @@
           <button type="submit" class="boton boton--principal">Guardar</button>
         </div>
       </form>
+      <p class="importar-aviso" id="importar-aviso" aria-live="polite" hidden></p>
       <div id="dinero-contenido"></div>
     </section>
     <section class="area" style="--color: var(--suscripciones); --boton: #8e3fc4" aria-labelledby="t-suscripciones">
@@ -529,7 +569,7 @@
     <section class="area area--entera" style="--color: var(--archivos); --boton: #0b6e99" aria-labelledby="t-archivos">
       <div class="area-cabecera">
         <h2 id="t-archivos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Archivos</h2>
-        <div class="archivos-botones">
+        <div class="cabecera-botones">
           <button type="button" class="boton-texto" id="archivos-buscar" hidden>Buscar en Drive</button>
           <button type="button" class="boton-texto" id="archivos-subir" hidden>Subir archivo</button>
         </div>
@@ -581,7 +621,7 @@
   function guardar() { guardarLocal(); programarSincronizacion(); }
   // Completa los apartados que falten (datos guardados con una versión anterior del panel).
   function completar(d) {
-    for (const [clave, vacio] of [['agenda', []], ['vence', []], ['dinero', []], ['suscripciones', []], ['habitos', []], ['compra', []], ['archivos', []]]) {
+    for (const [clave, vacio] of [['agenda', []], ['vence', []], ['dinero', []], ['suscripciones', []], ['habitos', []], ['compra', []], ['archivos', []], ['reglas', []]]) {
       if (!d[clave] || typeof d[clave] !== 'object') d[clave] = vacio;
     }
     delete d.salud; // el apartado de salud se quitó el 15/11/2026
@@ -801,7 +841,8 @@
       const [a, mes, dia] = m.fecha.split('-').map(Number);
       const texto = el('span', 'mov-texto');
       texto.append(el('b', null, m.concepto), el('span', null, `${m.categoria} · ${fmtDiaCorto.format(new Date(a, mes - 1, dia)).replace('.', '')}`));
-      const importe = el('span', 'mov-importe' + (m.tipo === 'ingreso' ? ' ingreso' : ''), (m.tipo === 'ingreso' ? '+' : '−') + euros(m.importe));
+      const suma = m.tipo === 'ingreso' || m.importe < 0; // las devoluciones son gastos en negativo
+      const importe = el('span', 'mov-importe' + (suma ? ' ingreso' : ''), (suma ? '+' : '−') + euros(Math.abs(m.importe)));
       const borrar = el('button', 'borrar');
       borrar.type = 'button';
       borrar.innerHTML = icoBorrar;
@@ -1151,6 +1192,168 @@
     formCompra.nombre.focus(); // listo para el siguiente artículo; la sección se queda
   });
 
+  // ---------- Importar movimientos del banco: Unicaja (Norma 43, archivo .csb) ----------
+  // El archivo se lee aquí mismo; solo entra en el panel lo que confirmas en la vista previa.
+  const NO_CUENTA = 'No cuenta';
+  const PALABRAS_VACIAS = new Set(['www', 'com', 'paypal', 'sumup', 'comp', 'tpv', 'the']);
+  // Clasificación de partida por cadenas conocidas; lo que corrijas se guarda como regla vuestra (en los datos, no aquí)
+  const CADENAS = [
+    [/mercadona|mercadnoa|lidl|aldi|consum|condis|carrefour|eroski|caprabo|bonpreu|bon preu|alcampo|supercor|hipercor/, 'Comida'],
+    [/pizz|kebab|doner|burger|mcdonald|telepizza|restaurant|rest\.|cafeteria|heladeria|gelateria|focacceria|rostiseria|glovo|just eat/, 'Restaurantes'],
+    [/benzinera|gasolinera|repsol|cepsa|galp|\be\.s\.|bicing|renfe|\btmb\b|parking|autopista|peaje/, 'Transporte'],
+    [/kiwoko|tiendanimal|siria\.pet|veterinari/, 'Mascotas'],
+    [/farmacia|clinica|dental|optica/, 'Salud'],
+    [/naturgy|endesa|iberdrola|energia|aigues|agua|\badt\b|securitas|movistar|vodafone|orange|\bdigi\b|comunidad/, 'Casa'],
+    [/amazon|aliexpress|zara|lefties|primark|leroy|ikea|decathlon|jysk|mediamarkt|fnac|bazar/, 'Compras'],
+  ];
+  const sinAcentos = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const palabrasDe = (t) => sinAcentos(t).replace(/[^a-z]+/g, ' ').trim().split(' ');
+  // La palabra que identifica a un comercio o persona para recordar su categoría («MERCADONA CAM DE LA SEN» → «mercadona»)
+  const palabraClave = (t) => palabrasDe(t).find((w) => w.length >= 3 && !PALABRAS_VACIAS.has(w)) || '';
+  // Nombre legible: sin «www.» ni códigos de pedido («WWW.AMAZON* UC8OG6DA5» → «Amazon»)
+  const titulo = (t) => (t.replace(/^www\./i, '').replace(/\*\s*\S*\d\S*/g, '').replace(/\b(?=[a-z]*\d)(?=\d*[a-z])[a-z\d]+\b|\b\d{4,}\b/gi, '')
+    .replace(/(^|\s)[-.\/*]+(?=\s|$)/g, ' ').trim() || t).toLowerCase().replace(/\s+/g, ' ').replace(/(^|[\s.*-])(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
+  // Huella corta de un texto (para reconocer un movimiento ya importado sin guardar datos de la cuenta)
+  function huella(t) { let h = 2166136261; for (const c of t) h = Math.imul(h ^ c.codePointAt(0), 16777619) >>> 0; return h.toString(36); }
+
+  function leerNorma43(texto) {
+    const movs = [];
+    let cuenta = '';
+    const fecha = (s) => `20${s.slice(0, 2)}-${s.slice(2, 4)}-${s.slice(4, 6)}`;
+    for (const linea of texto.split(/\r?\n/)) {
+      const tipo = linea.slice(0, 2);
+      if (tipo === '11') cuenta = linea.slice(2, 20);
+      else if (tipo === '22') {
+        movs.push({ linea: cuenta + linea.slice(10, 64), fecha: fecha(linea.slice(10, 16)), comun: linea.slice(22, 24),
+          cargo: linea[27] === '1', importe: Number(linea.slice(28, 42)) / 100, ref: linea.slice(52, 64), textos: [] });
+      } else if (tipo === '23' && movs.length) movs.at(-1).textos.push(linea.slice(4, 42).trim(), linea.slice(42, 80).trim());
+    }
+    const repetidos = {};
+    return movs.map((m) => {
+      const [operacion = '', quien = ''] = m.textos.filter(Boolean).length > 1 ? m.textos : [m.textos[0] || '', m.textos[0] || ''];
+      const base = m.linea + m.textos.join('|');
+      repetidos[base] = (repetidos[base] || 0) + 1; // dos movimientos idénticos en el mismo archivo siguen siendo dos
+      const devolucion = !m.cargo && (m.comun === '98' || /retroces|devoluc|anulac/i.test(operacion));
+      return { id: 'u' + huella(base + '#' + repetidos[base]), fecha: m.fecha, comun: m.comun, ref: m.ref, operacion, quien, devolucion,
+        tipo: m.cargo || devolucion ? 'gasto' : 'ingreso', importe: devolucion ? -m.importe : m.importe, concepto: titulo(quien || operacion) };
+    });
+  }
+
+  function clasificar(m) {
+    const palabras = new Set(palabrasDe(m.quien));
+    const regla = datos.reglas.find((r) => palabras.has(r.palabra));
+    let cat = regla?.categoria;
+    if (!cat) {
+      const texto = sinAcentos(`${m.operacion} ${m.quien}`);
+      if (m.comun === '04' && m.ref.includes('REV')) cat = NO_CUENTA; // ida y vuelta con la tarjeta Revolut
+      else if (m.comun === '15') cat = 'Nómina';
+      else if (m.comun === '17') cat = 'Intereses';
+      else if (m.comun === '05') cat = 'Préstamo e hipoteca';
+      else if (m.comun === '07') cat = 'Inversión';
+      else cat = CADENAS.find(([re]) => re.test(texto))?.[1];
+    }
+    const validas = m.tipo === 'ingreso' ? CATEGORIAS_INGRESO : CATEGORIAS_GASTO;
+    return cat === NO_CUENTA || validas.includes(cat) ? cat : 'Otros';
+  }
+
+  const entradaBanco = document.getElementById('importar-archivo');
+  document.getElementById('importar-abrir').addEventListener('click', () => entradaBanco.click());
+  entradaBanco.addEventListener('change', async () => {
+    const archivo = entradaBanco.files[0];
+    entradaBanco.value = '';
+    if (!archivo) return;
+    const texto = new TextDecoder('windows-1252').decode(await archivo.arrayBuffer()); // los bancos españoles usan esta codificación
+    const movs = leerNorma43(texto);
+    if (!movs.length) return avisoImportar('Ese archivo no parece un extracto de Unicaja. En la app del banco, descarga los movimientos en formato «Norma 43» (.csb).', true);
+    abrirVistaPrevia(movs);
+  });
+
+  function avisoImportar(texto, mal = false) {
+    const p = document.getElementById('importar-aviso');
+    p.textContent = texto; p.hidden = !texto; p.classList.toggle('error', mal);
+  }
+
+  function abrirVistaPrevia(movs) {
+    const yaEstan = new Set(datos.dinero.map((m) => m.id));
+    const nuevos = movs.filter((m) => !yaEstan.has(m.id)).sort((a, b) => b.fecha.localeCompare(a.fecha));
+    const repetidos = movs.length - nuevos.length;
+    if (!nuevos.length) return avisoImportar(`Todo lo de ese archivo ya estaba importado (${movs.length} movimientos).`);
+    for (const m of nuevos) { m.categoria = clasificar(m); m.manual = false; }
+    const ignorados = nuevos.filter((m) => m.categoria === NO_CUENTA).length;
+    if (ignorados === nuevos.length) return avisoImportar(`Nada nuevo que importar: ${repetidos} ya estaban y ${ignorados} no cuentan (traspasos).`);
+
+    const dialogo = el('dialog', 'importar');
+    dialogo.setAttribute('aria-labelledby', 'importar-titulo');
+    const titulo = el('h2', null, 'Revisa antes de importar'); titulo.id = 'importar-titulo';
+    const resumen = el('p', 'importar-resumen');
+    const listaCuentan = el('ul', 'importar-lista');
+    const listaNo = el('ul', 'importar-lista');
+    const plegable = el('details', 'importar-nocuentan');
+    const resumenNo = el('summary');
+    plegable.append(resumenNo, el('p', 'importar-nota', 'Traspasos entre vuestras cuentas o entre vosotros: no son gasto ni ingreso. Si alguno sí cuenta, cámbialo.'), listaNo);
+    const importar = el('button', 'boton boton--principal');
+    importar.type = 'button';
+
+    function fila(m) {
+      const li = el('li', 'importar-fila');
+      const [a, mes, d] = m.fecha.split('-');
+      const texto = el('span', 'importar-texto');
+      texto.append(el('b', null, m.concepto), el('span', null, `${d}/${mes}/${a} · ${titulo2(m.operacion)}`));
+      const suma = m.tipo === 'ingreso' || m.importe < 0;
+      const importe = el('span', 'importar-importe' + (suma ? ' ingreso' : ''), (suma ? '+' : '−') + euros(Math.abs(m.importe)));
+      const lista = el('select');
+      lista.setAttribute('aria-label', `Categoría de «${m.concepto}»`);
+      for (const c of [...(m.tipo === 'ingreso' ? CATEGORIAS_INGRESO : CATEGORIAS_GASTO), NO_CUENTA]) lista.append(new Option(c, c));
+      lista.value = m.categoria;
+      lista.addEventListener('change', () => {
+        m.categoria = lista.value; m.manual = true;
+        // Lo mismo para los demás del mismo comercio o persona que aún no hayas tocado
+        const clave = palabraClave(m.quien);
+        for (const o of nuevos) if (!o.manual && clave && palabraClave(o.quien) === clave && o.tipo === m.tipo) o.categoria = m.categoria;
+        pintarListas();
+      });
+      li.append(texto, importe, lista);
+      return li;
+    }
+    function pintarListas() {
+      const cuentan = nuevos.filter((m) => m.categoria !== NO_CUENTA);
+      const noCuentan = nuevos.filter((m) => m.categoria === NO_CUENTA);
+      listaCuentan.replaceChildren(...cuentan.map(fila));
+      listaNo.replaceChildren(...noCuentan.map(fila));
+      resumenNo.textContent = `No cuentan (${noCuentan.length})`;
+      plegable.hidden = !noCuentan.length;
+      resumen.textContent = `${cuentan.length} movimientos para importar` + (repetidos ? ` · ${repetidos} ya estaban importados` : '') + '. Corrige la categoría de lo que esté mal: el panel lo recordará.';
+      importar.textContent = `Importar ${cuentan.length}`;
+      importar.disabled = !cuentan.length;
+    }
+
+    const cancelar = el('button', 'boton', 'Cancelar');
+    cancelar.type = 'button';
+    cancelar.addEventListener('click', () => dialogo.close());
+    importar.addEventListener('click', () => {
+      const cuentan = nuevos.filter((m) => m.categoria !== NO_CUENTA);
+      for (const m of cuentan) datos.dinero.push({ id: m.id, tipo: m.tipo, concepto: m.concepto, importe: m.importe, categoria: m.categoria, fecha: m.fecha, banco: 'unicaja' });
+      // Lo que has corregido se recuerda para la próxima vez (una regla por comercio o persona)
+      for (const m of nuevos.filter((x) => x.manual)) {
+        const palabra = palabraClave(m.quien);
+        if (!palabra) continue;
+        datos.reglas = datos.reglas.filter((r) => r.palabra !== palabra);
+        datos.reglas.push({ id: 'r-' + palabra, palabra, categoria: m.categoria });
+      }
+      guardar(); pintarDinero();
+      dialogo.close();
+      avisoImportar(`Importados ${cuentan.length} movimientos de Unicaja.`);
+    });
+    const pie = el('div', 'importar-pie');
+    pie.append(cancelar, importar);
+    dialogo.append(titulo, resumen, listaCuentan, plegable, pie);
+    dialogo.addEventListener('close', () => dialogo.remove());
+    pintarListas();
+    document.body.append(dialogo);
+    dialogo.showModal();
+  }
+  const titulo2 = (t) => t.charAt(0) + t.slice(1).toLowerCase();
+
   // ---------- Archivos: lo subido a Drive desde el panel (la lista la veis los dos) ----------
   const fmtCorto = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
   let archivosTodos = false;
@@ -1258,7 +1461,7 @@
   const CLAVE_SELECTOR = 'AIzaSyCfF_y76_iluT8MZSG1gumD__w7-92s5xY'; // solo sirve para el selector de Drive y solo desde vuestra dirección
   const NUMERO_PROYECTO = '786823678377';
   const NOMBRE_ARCHIVO = 'panel-de-vida-datos.json';
-  const COLECCIONES = ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra', 'archivos'];
+  const COLECCIONES = ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra', 'archivos', 'reglas'];
   const CLAVE_DRIVE = 'panel-drive';   // {archivoId, carpetaId, propio, base, sincronizado}
   const CLAVE_TOKEN = 'panel-token';   // {valor, caduca}
   let clienteToken = null;
@@ -1959,6 +2162,20 @@
     const una = cuerpoCita({ titulo: 'B', fecha: '2026-03-29', hora: '23:30', hasta: '', lugar: '' });
     const con = cuerpoCita({ titulo: 'C', fecha: '2026-03-29', hora: '09:00', hasta: '10:15', lugar: 'X' });
     console.assert(todo.end.date === '2027-01-01' && una.end.dateTime === '2026-03-29T23:59:00' && con.end.dateTime === '2026-03-29T10:15:00' && con.start.dateTime === '2026-03-29T09:00:00', 'cuerpoCita');
+  }
+  {
+    // Norma 43 inventada: una compra con tarjeta, una devolución, un traspaso con Revolut y dos movimientos idénticos
+    const r22 = (fecha, comun, dh, cent, ref = '            ') => '22' + '0000' + '0000' + fecha + fecha + comun + '000' + dh + String(cent).padStart(14, '0') + '0000000000' + ref + ''.padEnd(16);
+    const r23 = (a, b) => '2301' + a.padEnd(38) + b.padEnd(38);
+    const f = ['110000000000000000', r22('261101', '12', '1', 4590), r23('COMP.TPV FISICO NACI', 'MERCADONA CAM'),
+      r22('261102', '98', '2', 1000), r23('RETROCES.TPV FISICO', 'WWW.AMAZON* X1'),
+      r22('261103', '04', '2', 50000, '261103REV261'), r23('TRANSF.SEPA NACIONAL', 'Persona Prueba'),
+      r22('261104', '12', '1', 100), r23('COM. EXPEDIC.', 'IGUAL'), r22('261104', '12', '1', 100), r23('COM. EXPEDIC.', 'IGUAL')].join('\r\n');
+    const m = leerNorma43(f);
+    console.assert(m.length === 5 && m[0].fecha === '2026-11-01' && m[0].importe === 45.9 && m[0].tipo === 'gasto' && clasificar(m[0]) === 'Comida'
+      && m[1].importe === -10 && m[1].tipo === 'gasto' && clasificar(m[1]) === 'Compras' && clasificar(m[2]) === NO_CUENTA
+      && m[3].id !== m[4].id && leerNorma43(f)[4].id === m[4].id && palabraClave('WWW.AMAZON* X1') === 'amazon' && titulo('WWW.AMAZON* UC8OG6DA5') === 'Amazon' && titulo('ADT       019Z7G') === 'Adt'
+      && titulo('PRESTAMO  2103-7969-0500000780') === 'Prestamo' && titulo('INGRESO COMUNIDAD 8-3') === 'Ingreso Comunidad 8-3', 'leerNorma43');
   }
   console.assert(racha({ hechos: [masDias(-1), masDias(-2), masDias(-4)] }) === 2 && racha({ hechos: [hoy, masDias(-1)] }) === 2 && racha({ hechos: [] }) === 0, 'racha');
   console.assert(proximoCobro({ fecha: masDias(-30), periodo: 'mensual' }) >= hoy && proximoCobro({ fecha: masDias(5), periodo: 'anual' }) === masDias(5), 'proximoCobro');
