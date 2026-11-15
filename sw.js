@@ -1,6 +1,6 @@
 // Trabajador del Panel de vida: guarda una copia de la app para que abra sin conexión.
 // Primero intenta la versión nueva de internet; si no hay conexión, usa la copia guardada.
-const CACHE = 'panel-v7';
+const CACHE = 'panel-v8';
 const ARCHIVOS = ['./panel.html', './manifest.webmanifest', './icons/icono-192.png', './icons/icono-512.png', './icons/icono-maskable-512.png', './icons/icono-apple-180.png'];
 
 self.addEventListener('install', (e) => {
@@ -20,7 +20,8 @@ self.addEventListener('fetch', (e) => {
   // Solo los archivos de la propia app; lo de Google (más adelante) va siempre directo.
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    // no-cache: pregunta siempre al servidor si hay versión nueva (si no, el navegador da la guardada hasta 10 min)
+    fetch(e.request.url, { cache: 'no-cache' })
       .then((resp) => {
         if (resp.ok) { const copia = resp.clone(); caches.open(CACHE).then((c) => c.put(e.request, copia)); }
         return resp;
