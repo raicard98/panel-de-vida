@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#000000">
 <!-- Privacidad: lo único externo permitido es Google (entrar con vuestra cuenta). Nada más se conecta a ningún sitio. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://accounts.google.com; script-src 'unsafe-inline' https://accounts.google.com/gsi/client; frame-src https://accounts.google.com; img-src data: 'self' https://*.googleusercontent.com; manifest-src 'self'; worker-src 'self'; connect-src 'self' https://accounts.google.com; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://accounts.google.com https://www.gstatic.com; script-src 'unsafe-inline' https://accounts.google.com/gsi/client https://apis.google.com https://www.gstatic.com; frame-src https://accounts.google.com https://docs.google.com https://drive.google.com https://content.googleapis.com; img-src data: 'self' https://*.googleusercontent.com https://*.gstatic.com; manifest-src 'self'; worker-src 'self'; connect-src 'self' https://accounts.google.com https://www.googleapis.com https://content.googleapis.com https://apis.google.com; form-action 'none'">
 <title>Panel de vida</title>
 <!-- App instalable: ficha, icono y nombre en la pantalla de inicio -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -60,7 +60,12 @@
   .cuenta-nombre small { display: block; font-size: 12px; font-weight: 500; color: var(--texto-2); }
   .cuenta .boton-texto { --color: var(--texto-2); font-size: 14px; }
   .cuenta-aviso { margin: 0; font-size: 13px; color: var(--texto-2); max-width: 22ch; text-align: right; }
-  @media (max-width: 600px) { .cuenta-nombre { display: none; } }
+  @media (max-width: 600px) {
+    .cuenta-nombre { display: none; }
+    /* En el móvil, la cuenta va en su propia fila encima de la fecha, para no apretar el saludo */
+    .cabecera { flex-wrap: wrap; }
+    .cuenta:has(.sinc) { order: -1; width: 100%; justify-content: flex-end; min-height: 0; }
+  }
   .fecha {
     margin: 0 0 2px;
     color: var(--texto-2);
@@ -280,6 +285,26 @@
     .compra-anadir select { grid-column: 1; }
   }
 
+  /* Datos compartidos en Drive */
+  .drive { margin-bottom: 20px; }
+  .drive-titulo { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+  .drive-texto { margin: 0 0 12px; color: var(--texto-2); font-size: 14px; max-width: 70ch; }
+  .drive-compartir { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; max-width: 520px; }
+  .drive-compartir input {
+    flex: 1 1 220px; min-width: 0; font: inherit; font-size: 16px; color: var(--texto); color-scheme: dark;
+    background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 10px; padding: 9px 10px;
+  }
+  .drive-compartir .boton--principal { --boton: #0066d6; }
+  .drive .pie-botones .boton--principal { --boton: #0066d6; }
+  .sinc {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    border: 0; border-radius: 999px; padding: 5px 10px; color: var(--texto-2); background: var(--tarjeta);
+  }
+  .sinc--ok { color: var(--dinero); }
+  .sinc--token, .sinc--sinred { color: var(--vence); }
+  .sinc--error { color: #ff6961; }
+  .sinc:disabled { cursor: progress; opacity: .8; }
+
   /* Pie: copia de seguridad */
   .pie { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--linea); }
   .pie-texto { margin: 0 0 12px; color: var(--texto-2); font-size: 14px; max-width: 70ch; }
@@ -426,6 +451,7 @@
   </div>
 
   <footer class="pie">
+    <section class="drive" id="drive" aria-labelledby="t-drive"></section>
     <p class="pie-texto" id="pie-texto">Tus datos se guardan solo en este navegador y no se envían a ningún sitio.</p>
     <div class="pie-botones">
       <button type="button" class="boton" id="copia-guardar">Guardar copia</button>
@@ -521,10 +547,12 @@
   function cargar() {
     try { return JSON.parse(localStorage.getItem(CLAVE)); } catch { return null; }
   }
-  function guardar() {
+  function guardarLocal() {
     try { localStorage.setItem(CLAVE, JSON.stringify(datos)); }
     catch { /* el navegador no deja guardar (p. ej. modo privado): el panel sigue funcionando */ }
   }
+  // Guarda en este dispositivo y, si estáis conectados a Drive, lo sube al poco rato.
+  function guardar() { guardarLocal(); programarSincronizacion(); }
   // Completa los apartados que falten (datos guardados con una versión anterior del panel).
   function completar(d) {
     const ej = d.ejemplo ? datosDeEjemplo() : {};
@@ -1049,7 +1077,9 @@
   function pintarPie() {
     document.getElementById('ejemplo-borrar').hidden = !datos.ejemplo;
     document.getElementById('pie-texto').textContent =
-      'Tus datos se guardan solo en este navegador y no se envían a ningún sitio. ' +
+      (leerDrive()?.archivoId
+        ? 'Vuestros datos se guardan en este dispositivo y en vuestra carpeta «Panel de vida» de Google Drive. '
+        : 'Tus datos se guardan solo en este navegador y no se envían a ningún sitio. ') +
       (datos.ultimaCopia ? `Última copia: ${fechaCorta(datos.ultimaCopia)}.` : 'Aún no has guardado ninguna copia.');
   }
 
@@ -1088,14 +1118,279 @@
 
   // Quita solo lo que venía de ejemplo; lo que hayas añadido tú se queda.
   const ID_EJEMPLO = /^(e|v|d|s|h|c)\d+$/;
+  function quitarEjemplos() {
+    for (const k of ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra']) datos[k] = datos[k].filter((x) => !ID_EJEMPLO.test(x.id));
+    datos.ejemplo = false;
+  }
   document.getElementById('ejemplo-borrar').addEventListener('click', () => {
     if (!confirm('¿Borrar todos los datos de ejemplo? Lo que hayas añadido tú se queda.')) return;
-    for (const k of ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra'])datos[k] = datos[k].filter((x) => !ID_EJEMPLO.test(x.id));
-    datos.ejemplo = false;
+    quitarEjemplos();
     guardar(); pintarTodo(); pintarPie();
     avisar('Datos de ejemplo borrados. El panel es todo tuyo.');
   });
 
+  // ---------- Datos compartidos en Google Drive ----------
+  // Un archivo «panel-de-vida-datos.json» dentro de la carpeta «Panel de vida» del primero que la crea,
+  // compartida con el otro. La app solo ve ese archivo (permiso drive.file), nunca el resto del Drive.
+  const DRIVE = 'https://www.googleapis.com/drive/v3/';
+  const DRIVE_SUBIDA = 'https://www.googleapis.com/upload/drive/v3/';
+  const PERMISO_DRIVE = 'https://www.googleapis.com/auth/drive.file';
+  const CLAVE_SELECTOR = 'AIzaSyCfF_y76_iluT8MZSG1gumD__w7-92s5xY'; // solo sirve para el selector de Drive y solo desde vuestra dirección
+  const NUMERO_PROYECTO = '786823678377';
+  const NOMBRE_ARCHIVO = 'panel-de-vida-datos.json';
+  const COLECCIONES = ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra'];
+  const CLAVE_DRIVE = 'panel-drive';   // {archivoId, carpetaId, propio, base, sincronizado}
+  const CLAVE_TOKEN = 'panel-token';   // {valor, caduca}
+  let clienteToken = null;
+  let estadoSync = 'ok';               // ok | trabajando | token | error | sinred
+  let enCurso = null, temporizador = null;
+
+  const leerJSON = (clave) => { try { return JSON.parse(localStorage.getItem(clave)); } catch { return null; } };
+  const escribirJSON = (clave, valor) => { try { valor == null ? localStorage.removeItem(clave) : localStorage.setItem(clave, JSON.stringify(valor)); } catch { /* sin espacio o modo privado */ } };
+  function leerDrive() { return leerJSON(CLAVE_DRIVE); }
+  const colecciones = (d) => Object.fromEntries(COLECCIONES.map((k) => [k, d?.[k] || []]));
+
+  // Mezcla los cambios de este dispositivo y los del otro, tomando como referencia la última versión sincronizada (base):
+  // lo que solo cambió aquí se queda, lo que solo cambió allí entra, y si los dos tocasteis lo mismo gana este dispositivo.
+  // Un borrado nunca pisa un cambio del otro (mejor que sobre algo a que se pierda).
+  function fusionar(base, local, remoto) {
+    const resultado = {};
+    for (const k of COLECCIONES) {
+      const B = new Map((base?.[k] || []).map((x) => [x.id, JSON.stringify(x)]));
+      const L = new Map((local?.[k] || []).map((x) => [x.id, x]));
+      const R = new Map((remoto?.[k] || []).map((x) => [x.id, x]));
+      const ids = [...new Set([...R.keys(), ...L.keys()])];
+      resultado[k] = ids.flatMap((id) => {
+        const l = L.get(id), r = R.get(id), b = B.get(id);
+        const ls = l && JSON.stringify(l), rs = r && JSON.stringify(r);
+        const elegido = ls === b ? r : rs === b ? l : (l ?? r);
+        return elegido ? [elegido] : [];
+      });
+    }
+    return resultado;
+  }
+
+  // --- Permiso de Google para tocar vuestro archivo de Drive (dura una hora; se renueva con un toque) ---
+  function tokenValido() { const t = leerJSON(CLAVE_TOKEN); return t && t.caduca > Date.now() + 60000 ? t.valor : null; }
+  function pedirToken() {
+    return new Promise((ok, mal) => {
+      if (!clienteToken) return mal(new Error('Google aún no ha cargado. Prueba en unos segundos.'));
+      clienteToken.callback = (r) => {
+        if (r.error) return mal(new Error('Google no ha dado permiso para usar Drive.'));
+        escribirJSON(CLAVE_TOKEN, { valor: r.access_token, caduca: Date.now() + r.expires_in * 1000 });
+        ok(r.access_token);
+      };
+      clienteToken.error_callback = () => mal(new Error('Se cerró la ventana de Google sin dar permiso.'));
+      clienteToken.requestAccessToken({ prompt: '', hint: sesion?.email });
+    });
+  }
+  const conToken = async () => tokenValido() || pedirToken();
+
+  async function llamarDrive(url, opciones = {}) {
+    const resp = await fetch(url, { ...opciones, headers: { Authorization: `Bearer ${tokenValido()}`, ...opciones.headers } });
+    if (resp.status === 401) { escribirJSON(CLAVE_TOKEN, null); throw Object.assign(new Error('Hay que volver a dar permiso a Drive.'), { token: true }); }
+    if (resp.status === 404) throw Object.assign(new Error('No se encuentra el archivo compartido en Drive.'), { perdido: true });
+    if (!resp.ok) throw new Error(`Drive respondió con un error (${resp.status}).`);
+    return resp;
+  }
+  const versionRemota = async (id) => (await (await llamarDrive(`${DRIVE}files/${id}?fields=version`)).json()).version;
+  const bajarRemoto = async (id) => (await llamarDrive(`${DRIVE}files/${id}?alt=media`)).json();
+  const subirRemoto = (id, contenido) => llamarDrive(`${DRIVE_SUBIDA}files/${id}?uploadType=media`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contenido),
+  });
+
+  // --- Sincronizar: bajar lo del otro, mezclar, subir lo de aquí ---
+  function programarSincronizacion() {
+    if (!leerDrive()?.archivoId) return;
+    clearTimeout(temporizador);
+    temporizador = setTimeout(sincronizar, 1500);
+  }
+  function sincronizar() { if (!enCurso) enCurso = sincronizarAhora().finally(() => { enCurso = null; }); return enCurso; }
+
+  async function sincronizarAhora() {
+    const cfg = leerDrive();
+    if (!cfg?.archivoId || !sesion) return;
+    if (!navigator.onLine) return ponerEstado('sinred');
+    if (!tokenValido()) return ponerEstado('token');
+    ponerEstado('trabajando');
+    try {
+      for (let intento = 0; intento < 3; intento++) {
+        const version = await versionRemota(cfg.archivoId);
+        const remoto = await bajarRemoto(cfg.archivoId);
+        const mezcla = fusionar(cfg.base, colecciones(datos), colecciones(remoto));
+        if (JSON.stringify(mezcla) !== JSON.stringify(colecciones(remoto))) {
+          if ((await versionRemota(cfg.archivoId)) !== version) continue; // el otro guardó justo ahora: repetir con lo suyo
+          await subirRemoto(cfg.archivoId, { ...mezcla, actualizado: new Date().toISOString(), por: sesion.nombre });
+        }
+        const cambiaAqui = JSON.stringify(mezcla) !== JSON.stringify(colecciones(datos));
+        Object.assign(datos, mezcla);
+        datos.ejemplo = false;
+        guardarLocal();
+        escribirJSON(CLAVE_DRIVE, { ...cfg, base: mezcla, sincronizado: new Date().toISOString() });
+        if (cambiaAqui) pintarTodo();
+        return ponerEstado('ok');
+      }
+      throw new Error('Los dos estabais guardando a la vez; se reintentará.');
+    } catch (e) {
+      ponerEstado(e.token ? 'token' : 'error', e.message);
+    }
+  }
+
+  // --- Crear la carpeta compartida (lo hace el primero) ---
+  async function crearCompartido() {
+    await conToken();
+    ponerEstado('trabajando');
+    quitarEjemplos(); // los ejemplos no se suben a Drive
+    guardarLocal();
+    const carpeta = await (await llamarDrive(`${DRIVE}files?fields=id`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Panel de vida', mimeType: 'application/vnd.google-apps.folder' }),
+    })).json();
+    const cuerpo = new FormData();
+    cuerpo.append('metadata', new Blob([JSON.stringify({ name: NOMBRE_ARCHIVO, mimeType: 'application/json', parents: [carpeta.id] })], { type: 'application/json' }));
+    cuerpo.append('file', new Blob([JSON.stringify({ ...colecciones(datos), actualizado: new Date().toISOString(), por: sesion.nombre })], { type: 'application/json' }));
+    const archivo = await (await llamarDrive(`${DRIVE_SUBIDA}files?uploadType=multipart&fields=id`, { method: 'POST', body: cuerpo })).json();
+    escribirJSON(CLAVE_DRIVE, { archivoId: archivo.id, carpetaId: carpeta.id, propio: true, base: colecciones(datos), sincronizado: new Date().toISOString() });
+    pintarTodo(); pintarPie();
+    ponerEstado('ok');
+  }
+
+  // --- Compartir la carpeta con la otra persona (Google le manda un email) ---
+  async function compartirCon(email) {
+    const cfg = leerDrive();
+    await conToken();
+    await llamarDrive(`${DRIVE}files/${cfg.carpetaId}/permissions?sendNotificationEmail=true`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'writer', type: 'user', emailAddress: email }),
+    });
+  }
+
+  // --- Unirse: el segundo elige el archivo que le han compartido con el selector de Drive ---
+  function cargarSelector() {
+    return new Promise((ok, mal) => {
+      if (window.google?.picker) return ok();
+      const s = document.createElement('script');
+      s.src = 'https://apis.google.com/js/api.js';
+      s.onload = () => gapi.load('picker', { callback: ok, onerror: () => mal(new Error('No se pudo abrir el selector de Drive.')) });
+      s.onerror = () => mal(new Error('No se pudo abrir el selector de Drive.'));
+      document.head.append(s);
+    });
+  }
+  async function unirseCompartido() {
+    const token = await conToken();
+    await cargarSelector();
+    const vista = new google.picker.DocsView(google.picker.ViewId.DOCS).setMimeTypes('application/json').setMode(google.picker.DocsViewMode.LIST);
+    new google.picker.PickerBuilder()
+      .addView(vista)
+      .setOAuthToken(token).setDeveloperKey(CLAVE_SELECTOR).setAppId(NUMERO_PROYECTO)
+      .setLocale('es').setTitle(`Elige «${NOMBRE_ARCHIVO}»`)
+      .setCallback(async (r) => {
+        if (r.action !== google.picker.Action.PICKED) return;
+        const doc = r.docs[0];
+        if (doc.name !== NOMBRE_ARCHIVO && !confirm(`Ese archivo se llama «${doc.name}», no «${NOMBRE_ARCHIVO}». ¿Usarlo igualmente?`)) return;
+        quitarEjemplos();
+        guardarLocal();
+        escribirJSON(CLAVE_DRIVE, { archivoId: doc.id, carpetaId: doc.parentId, propio: false, base: null });
+        pintarDrive(); pintarPie();
+        await sincronizar(); // base vacía: se juntan vuestros datos con los suyos
+      })
+      .build().setVisible(true);
+  }
+
+  // --- Lo que se ve: estado arriba y apartado «Datos compartidos» al pie ---
+  const TEXTO_ESTADO = { ok: 'Sincronizado', trabajando: 'Sincronizando…', token: 'Toca para sincronizar', error: 'Error · reintentar', sinred: 'Sin conexión' };
+  let ultimoError = '';
+  function ponerEstado(estado, detalle = '') {
+    estadoSync = estado;
+    ultimoError = estado === 'error' ? detalle : '';
+    pintarCuenta();
+  }
+  function chipSincronizacion() {
+    if (!leerDrive()?.archivoId) return null;
+    // Si el permiso de Google ha caducado, no decir «Sincronizado» aunque lo último saliera bien
+    const estado = estadoSync === 'ok' && !tokenValido() ? 'token' : estadoSync;
+    const chip = el('button', `sinc sinc--${estado}`, TEXTO_ESTADO[estado]);
+    chip.type = 'button';
+    const cfg = leerDrive();
+    chip.title = estado === 'error' ? ultimoError : cfg.sincronizado ? `Última vez: ${new Date(cfg.sincronizado).toLocaleString('es-ES')}` : '';
+    chip.disabled = estado === 'trabajando';
+    chip.addEventListener('click', async () => {
+      try { await conToken(); } catch (e) { return ponerEstado('error', e.message); }
+      sincronizar();
+    });
+    return chip;
+  }
+
+  function pintarDrive() {
+    const caja = document.getElementById('drive');
+    caja.replaceChildren(el('h2', 'drive-titulo', 'Datos compartidos'));
+    caja.firstChild.id = 't-drive';
+    const cfg = leerDrive();
+    const accion = (texto, alPulsar, principal) => {
+      const b = el('button', principal ? 'boton boton--principal' : 'boton', texto);
+      b.type = 'button';
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try { await alPulsar(); } catch (e) { ponerEstado('error', e.message); avisar(e.message, true); }
+        finally { b.disabled = false; }
+      });
+      return b;
+    };
+    if (!location.protocol.startsWith('http')) {
+      caja.append(el('p', 'drive-texto', 'Para compartir con Drive, abre el panel desde su dirección: raicard98.github.io/panel-de-vida'));
+    } else if (!sesion) {
+      caja.append(el('p', 'drive-texto', 'Entra con Google (arriba a la derecha) para compartir los datos con tu pareja.'));
+    } else if (!cfg?.archivoId) {
+      caja.append(
+        el('p', 'drive-texto', 'Si sois los primeros, cread la carpeta compartida. Si la otra persona ya la creó y os la compartió, elegidla en vuestro Drive.'),
+      );
+      const botones = el('div', 'pie-botones');
+      botones.append(
+        accion('Crear carpeta compartida', async () => {
+          if (!confirm('Se creará la carpeta «Panel de vida» en tu Google Drive con tus datos (sin los de ejemplo). ¿Seguir?')) return;
+          await crearCompartido(); avisar('Carpeta creada en tu Drive. Ahora compártela con tu pareja.');
+        }, true),
+        accion('Usar la que me han compartido', unirseCompartido),
+      );
+      caja.append(botones);
+    } else {
+      caja.append(el('p', 'drive-texto', cfg.propio
+        ? 'Conectado a tu carpeta «Panel de vida» de Drive. Compártela con tu pareja para que vea lo mismo:'
+        : 'Conectado a la carpeta «Panel de vida» que te compartieron.'));
+      if (cfg.propio) {
+        const forma = el('form', 'drive-compartir');
+        forma.noValidate = true;
+        const campo = el('input');
+        campo.type = 'email'; campo.placeholder = 'Email de Google de tu pareja'; campo.setAttribute('aria-label', 'Email de tu pareja');
+        const enviar = el('button', 'boton boton--principal', 'Compartir');
+        forma.append(campo, enviar);
+        forma.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const email = campo.value.trim();
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return avisar('Escribe un email válido.', true);
+          enviar.disabled = true;
+          try { await compartirCon(email); campo.value = ''; avisar(`Compartida con ${email}. Le llegará un email de Google; luego, en su panel, que pulse «Usar la que me han compartido».`); }
+          catch (err) { avisar(err.message, true); }
+          finally { enviar.disabled = false; }
+        });
+        caja.append(forma);
+      }
+      const botones = el('div', 'pie-botones');
+      botones.append(
+        accion('Sincronizar ahora', async () => { await conToken(); await sincronizar(); }),
+        accion('Desconectar de Drive', async () => {
+          if (!confirm('Este dispositivo dejará de compartir datos con Drive (no se borra nada). ¿Seguir?')) return;
+          escribirJSON(CLAVE_DRIVE, null); pintarCuenta(); pintarPie();
+        }),
+      );
+      caja.append(botones);
+    }
+  }
+
+  // Sincroniza al volver a la app, al recuperar la conexión y cada minuto mientras está abierta
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
+  addEventListener('online', () => sincronizar());
+  setInterval(() => { if (document.visibilityState === 'visible') sincronizar(); }, 60000);
   pintarPie();
 
   // ---------- Entrar con Google: cada uno con su cuenta ----------
@@ -1126,10 +1421,15 @@
       salir.type = 'button';
       salir.addEventListener('click', () => {
         window.google?.accounts.id.disableAutoSelect();
+        const token = tokenValido();
+        if (token) window.google?.accounts.oauth2?.revoke(token);
+        escribirJSON(CLAVE_TOKEN, null);
         sesion = null;
         try { localStorage.removeItem(CLAVE_SESION); } catch { /* nada que borrar */ }
         pintarCuenta();
       });
+      const chip = chipSincronizacion();
+      if (chip) caja.append(chip);
       caja.append(foto, nombre, salir);
     } else if (window.google?.accounts?.id) {
       const boton = el('div');
@@ -1138,6 +1438,7 @@
       const movil = matchMedia('(max-width: 600px)').matches;
       google.accounts.id.renderButton(boton, { type: movil ? 'icon' : 'standard', theme: 'filled_black', shape: movil ? 'circle' : 'pill', size: 'large', text: 'signin_with', locale: 'es_ES' });
     }
+    pintarDrive();
   }
 
   function alEntrar(respuesta) {
@@ -1154,6 +1455,7 @@
     gsi.async = true;
     gsi.onload = () => {
       google.accounts.id.initialize({ client_id: CLIENTE_GOOGLE, callback: alEntrar, auto_select: true, use_fedcm_for_prompt: true });
+      clienteToken = google.accounts.oauth2.initTokenClient({ client_id: CLIENTE_GOOGLE, scope: PERMISO_DRIVE, callback: () => {} });
       pintarCuenta();
       if (!sesion) google.accounts.id.prompt(); // si ya entraste antes en este móvil, entra solo
     };
@@ -1162,6 +1464,7 @@
     };
     document.head.append(gsi);
   }
+  sincronizar(); // al abrir: trae lo que haya cambiado tu pareja (si el permiso de Drive sigue vigente)
 
   // App instalable y sin conexión: solo funciona cuando el panel está publicado en internet (no al abrirlo con doble clic).
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
@@ -1172,6 +1475,12 @@
   console.assert(leerImporte('1.234,56') === 1234.56 && leerImporte('68.40') === 68.4 && leerImporte('') === null && Number.isNaN(leerImporte('abc')), 'leerImporte');
   console.assert(euros(1234.56).replace(/\s/g, ' ') === '1.234,56 €', 'euros: ' + euros(1234.56));
   console.assert(diasHasta(masDias(3)) === 3 && diasHasta(hoy) === 0, 'diasHasta');
+  {
+    const a = (id, x = '') => ({ id, n: id + x });
+    const m = fusionar({ compra: [a('1'), a('2'), a('3')] }, { compra: [a('1', 'L'), a('2'), a('5')] }, { compra: [a('1'), a('2', 'R'), a('3'), a('6')] }).compra.map((x) => x.n).join();
+    console.assert(m === '1L,2R,6,5', 'fusionar: ' + m);
+    console.assert(fusionar({ compra: [a('7')] }, { compra: [] }, { compra: [a('7', 'R')] }).compra[0]?.n === '7R', 'fusionar: un borrado no pisa un cambio');
+  }
   console.assert(racha({ hechos: [masDias(-1), masDias(-2), masDias(-4)] }) === 2 && racha({ hechos: [hoy, masDias(-1)] }) === 2 && racha({ hechos: [] }) === 0, 'racha');
   console.assert(proximoCobro({ fecha: masDias(-30), periodo: 'mensual' }) >= hoy && proximoCobro({ fecha: masDias(5), periodo: 'anual' }) === masDias(5), 'proximoCobro');
 </script>
