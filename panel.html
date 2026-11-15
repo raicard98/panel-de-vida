@@ -122,8 +122,11 @@
   .formulario { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; background: var(--tarjeta-2); border-radius: 14px; }
   .formulario[hidden], .formulario label[hidden] { display: none; }
   /* Archivos */
+  .area-cabecera:has(.archivos-botones) { flex-wrap: wrap; row-gap: 4px; }
+  .archivos-botones { display: flex; gap: 14px; margin-left: -4px; }
   .archivos-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 14px; color: var(--texto-2); }
   .archivos-barra:empty { display: none; }
+  .archivos-barra a.boton { text-decoration: none; overflow-wrap: anywhere; }
   .archivos-barra p { margin: 0; flex: 1 1 100%; }
   .archivos-barra + #archivos-contenido { margin-top: 12px; }
   .archivos-barra:empty + #archivos-contenido { margin-top: 0; }
@@ -505,7 +508,10 @@
     <section class="area area--entera" style="--color: var(--archivos); --boton: #0b6e99" aria-labelledby="t-archivos">
       <div class="area-cabecera">
         <h2 id="t-archivos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Archivos</h2>
-        <button type="button" class="boton-texto" id="archivos-subir" hidden>Subir archivo</button>
+        <div class="archivos-botones">
+          <button type="button" class="boton-texto" id="archivos-buscar" hidden>Buscar en Drive</button>
+          <button type="button" class="boton-texto" id="archivos-subir" hidden>Subir archivo</button>
+        </div>
         <input type="file" id="archivos-input" hidden>
       </div>
       <div class="archivos-barra" id="archivos-barra" aria-live="polite"></div>
@@ -1794,6 +1800,33 @@
     return resp.json();
   }
 
+  // --- Buscar en Drive: el selector de Google con todo vuestro Drive; lo elegido se abre en Drive ---
+  let archivoAbrir = null; // si el navegador bloquea la pestaña nueva, se ofrece un enlace para tocar
+  document.getElementById('archivos-buscar').addEventListener('click', async () => {
+    try {
+      if (!tokenValido()) await pedirToken();
+      await cargarSelector();
+      const vista = (etiqueta) => new google.picker.DocsView(google.picker.ViewId.DOCS).setIncludeFolders(true).setLabel(etiqueta);
+      new google.picker.PickerBuilder()
+        .addView(vista('Mi unidad').setParent('root'))
+        .addView(vista('Compartidos conmigo').setOwnedByMe(false))
+        .addView(new google.picker.DocsView(google.picker.ViewId.RECENTLY_PICKED).setLabel('Recientes'))
+        .setOAuthToken(tokenValido()).setDeveloperKey(CLAVE_SELECTOR).setAppId(NUMERO_PROYECTO)
+        .setLocale('es').setTitle('Buscar en vuestro Drive')
+        .setCallback((r) => {
+          if (r.action !== google.picker.Action.PICKED) return;
+          const doc = r.docs[0];
+          if (!/^https:\/\//.test(doc.url)) return;
+          const ventana = window.open(doc.url, '_blank'); // sin «noopener»: con él siempre devuelve null y no sabríamos si se abrió
+          if (ventana) ventana.opener = null;
+          archivoAbrir = ventana ? null : { nombre: doc.name, url: doc.url };
+          archivosEstado = ''; archivosError = false;
+          pintarArchivosAcciones();
+        })
+        .build().setVisible(true);
+    } catch (e) { archivosError = true; archivosEstado = e.message; pintarArchivosAcciones(); }
+  });
+
   async function continuarSubida() {
     if (!tokenValido()) return pintarArchivosAcciones(); // hace falta un toque para el permiso: lo pide el botón «Elegir carpeta»
     const archivo = archivoPendiente;
@@ -1819,7 +1852,14 @@
     const barra = document.getElementById('archivos-barra');
     const puede = location.protocol.startsWith('http') && !!sesion;
     document.getElementById('archivos-subir').hidden = !puede || subiendo;
+    document.getElementById('archivos-buscar').hidden = !puede;
     barra.replaceChildren();
+    if (puede && archivoAbrir) {
+      const enlace = el('a', 'boton boton--principal', `Abrir «${archivoAbrir.nombre}»`);
+      enlace.href = archivoAbrir.url; enlace.target = '_blank'; enlace.rel = 'noopener';
+      enlace.addEventListener('click', () => { archivoAbrir = null; setTimeout(pintarArchivosAcciones); });
+      barra.append(enlace);
+    }
     if (!puede) return barra.append(el('p', null, location.protocol.startsWith('http') ? 'Entra con Google para subir archivos a vuestro Drive.' : 'Para subir archivos, abre el panel desde su dirección.'));
     if (archivoPendiente && !subiendo) {
       const elegir = el('button', 'boton boton--principal', 'Elegir carpeta');
