@@ -55,6 +55,8 @@
   .cabecera { margin-bottom: 28px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
   /* Cuenta de Google: arriba a la derecha */
   .cuenta { display: flex; align-items: center; gap: 10px; min-height: 40px; flex: none; }
+  /* Los botones de Google van en un iframe claro: sin esto el navegador le pinta un fondo blanco opaco en la página oscura */
+  iframe { color-scheme: light; }
   .cuenta img { width: 36px; height: 36px; border-radius: 50%; background: var(--tarjeta-2); }
   .cuenta-nombre { font-size: 15px; font-weight: 600; line-height: 1.2; }
   .cuenta-nombre small { display: block; font-size: 12px; font-weight: 500; color: var(--texto-2); }
@@ -147,17 +149,19 @@
   .agenda-lista li:first-child { border-top: 0; }
   .evento-hora { font-size: 15px; font-weight: 600; }
   .evento-hora small { display: block; font-size: 12px; font-weight: 500; color: var(--texto-2); }
-  .evento-punto { width: 10px; height: 10px; border-radius: 50%; background: var(--agenda); }
-  .evento-punto--propio { background: none; border: 2px solid var(--agenda); }
+  .evento-punto { width: 10px; height: 10px; border-radius: 50%; background: var(--punto, var(--agenda)); }
   .evento-texto { min-width: 0; }
-  .agenda-google { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; font-size: 14px; color: var(--texto-2); }
+  .agenda-google { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 14px; color: var(--texto-2); }
   .agenda-google:empty { display: none; }
   .agenda-google p { margin: 0; }
-  .agenda-google select {
-    font: inherit; color: var(--texto); background: var(--tarjeta-2); border: 1px solid var(--linea);
-    border-radius: 10px; padding: 8px 10px; max-width: 100%;
+  .cal-boton {
+    display: inline-flex; align-items: center; gap: 7px; min-height: 34px; max-width: 100%; padding: 6px 12px; cursor: pointer;
+    font: inherit; font-size: 14px; font-weight: 600; color: var(--texto-2); overflow-wrap: anywhere; text-align: left;
+    background: none; border: 1px solid var(--linea); border-radius: 999px;
   }
-  .agenda-leyenda { display: inline-flex; align-items: center; gap: 6px; }
+  .cal-punto { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--cal); }
+  .cal-boton[aria-pressed="true"] { color: var(--texto); background: color-mix(in srgb, var(--cal) 20%, transparent); border-color: color-mix(in srgb, var(--cal) 55%, transparent); }
+  .cal-boton[aria-pressed="true"] .cal-punto { background: var(--cal); }
   .evento-titulo { display: block; font-weight: 600; overflow-wrap: anywhere; }
   .evento-lugar { display: block; font-size: 14px; color: var(--texto-2); overflow-wrap: anywhere; }
   .evento--pasado { opacity: .7; }
@@ -365,8 +369,8 @@
           <button type="submit" class="boton boton--principal">Guardar</button>
         </div>
       </form>
-      <div id="agenda-contenido"></div>
       <div class="agenda-google" id="agenda-google"></div>
+      <div id="agenda-contenido"></div>
     </section>
     <section class="area area--ancha" style="--color: var(--vence); --boton: #c25e00" aria-labelledby="t-vence">
       <div class="area-cabecera">
@@ -651,7 +655,8 @@
         }
         texto.append(titulo);
         if (c.lugar) texto.append(el('span', 'evento-lugar', c.lugar));
-        const punto = el('span', c.cal === 'propio' ? 'evento-punto evento-punto--propio' : 'evento-punto');
+        const punto = el('span', 'evento-punto');
+        if (c.color) punto.style.setProperty('--punto', c.color);
         if (c.cal) { li.append(hora, punto, texto, el('span')); lista.append(li); continue; } // de Google Calendar: se borra allí (de momento)
         const borrar = el('button', 'borrar');
         borrar.type = 'button';
@@ -1412,26 +1417,28 @@
   pintarPie();
 
   // ---------- Agenda con Google Calendar ----------
-  // Principal: el calendario compartido que elijáis en el panel (no va escrito en el código, que es público).
-  // Además, el calendario personal de quien abre el panel. Las citas se guardan aquí para verlas sin conexión.
+  // Se ven a la vez los calendarios que elijas con los botones de la agenda, cada uno con su color de Google.
+  // La lista y las citas se guardan en este dispositivo (para verlas sin conexión); nada de esto va en el código público.
   const CALENDAR = 'https://www.googleapis.com/calendar/v3/';
-  const CLAVE_CALENDARIO = 'panel-calendario'; // {principalId, principalNombre, eventos, cuenta, actualizado}
-  let calendarioError = '', calendarios = null;
+  const CLAVE_CALENDARIO = 'panel-calendario'; // {calendarios: [{id, nombre, color}], elegidos: [id], eventos, cuenta, actualizado}
+  let calendarioError = '';
 
   // Declarada como función (no const) porque la agenda la usa antes de llegar a este bloque
   function eventosCalendario() {
     try {
       const cfg = JSON.parse(localStorage.getItem('panel-calendario'));
       const cuenta = JSON.parse(localStorage.getItem('panel-sesion'))?.email;
-      return cfg?.cuenta && cfg.cuenta === cuenta ? cfg.eventos || [] : [];
+      if (!cfg?.cuenta || cfg.cuenta !== cuenta) return [];
+      const vistos = new Set(); // una cita que está en varios calendarios encendidos sale una vez
+      return (cfg.eventos || []).filter((c) => cfg.elegidos?.includes(c.cal) && !vistos.has(c.id) && vistos.add(c.id));
     } catch { return []; }
   }
 
   async function llamarCalendar(ruta) {
     const resp = await fetch(CALENDAR + ruta, { headers: { Authorization: `Bearer ${tokenValido()}` } });
     if (resp.status === 401) { escribirJSON(CLAVE_TOKEN, null); throw new Error('Hay que volver a dar permiso a Google.'); }
-    if (resp.status === 403) throw new Error('Google no deja ver ese calendario. Revisa que esté compartido contigo.');
-    if (resp.status === 404) throw new Error('No se encuentra el calendario elegido. Pulsa «Cambiar» y elígelo otra vez.');
+    if (resp.status === 403) throw new Error('Google no deja ver uno de los calendarios. Revisa que siga compartido contigo.');
+    if (resp.status === 404) throw new Error('Uno de los calendarios ya no existe o no está compartido contigo.');
     if (!resp.ok) throw new Error(`Google Calendar respondió con un error (${resp.status}).`);
     return resp.json();
   }
@@ -1441,39 +1448,43 @@
     const inicio = e.start.dateTime ? new Date(e.start.dateTime) : null;
     const fecha = inicio ? diaISO(inicio) : e.start.date;
     const hora = inicio && fecha >= hoy ? `${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}` : '';
-    return { id: `g-${e.id}`, titulo: e.summary || '(Sin título)', fecha: fecha < hoy ? hoy : fecha, hora, lugar: e.location || '', cal };
+    return { id: `g-${e.id}`, titulo: e.summary || '(Sin título)', fecha: fecha < hoy ? hoy : fecha, hora, lugar: e.location || '', cal: cal.id, color: cal.color };
   }
 
-  async function bajarEventos(id, cal) {
+  async function bajarEventos(cal) {
     const desde = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
     const hasta = new Date(desde); hasta.setDate(hasta.getDate() + 7);
     const q = new URLSearchParams({ timeMin: desde.toISOString(), timeMax: hasta.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '250' });
-    const r = await llamarCalendar(`calendars/${encodeURIComponent(id)}/events?${q}`);
+    const r = await llamarCalendar(`calendars/${encodeURIComponent(cal.id)}/events?${q}`);
     return (r.items || []).filter((e) => e.status !== 'cancelled').map((e) => aCita(e, cal));
   }
 
   async function cargarCalendario() {
-    const cfg = leerJSON(CLAVE_CALENDARIO);
-    if (!cfg?.principalId || !sesion || !navigator.onLine || !permisoCalendar()) return pintarAgendaGoogle();
+    if (!sesion || !navigator.onLine || !permisoCalendar()) return pintarAgendaGoogle();
     try {
-      const [principal, propio] = await Promise.all([
-        bajarEventos(cfg.principalId, 'principal'),
-        cfg.principalId === sesion.email ? [] : bajarEventos('primary', 'propio'),
-      ]);
-      const vistos = new Set(principal.map((c) => c.id)); // una cita que está en los dos calendarios sale una vez
-      const eventos = [...principal, ...propio.filter((c) => !vistos.has(c.id))];
+      const lista = await llamarCalendar('users/me/calendarList?minAccessRole=reader');
+      const items = (lista.items || []).sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0)); // el tuyo primero
+      const calendarios = items.map((c) => ({ id: c.id, nombre: c.primary ? 'Tu calendario' : c.summaryOverride || c.summary, color: c.backgroundColor || '#0a84ff' }));
+      const previo = leerJSON(CLAVE_CALENDARIO);
+      const mismaCuenta = previo?.cuenta === sesion.email;
+      // La primera vez se marcan los mismos que tienes encendidos en Google Calendar
+      const elegidos = (mismaCuenta && previo.elegidos ? previo.elegidos : items.filter((c) => c.selected).map((c) => c.id))
+        .filter((id) => calendarios.some((c) => c.id === id));
+      escribirJSON(CLAVE_CALENDARIO, { ...(mismaCuenta ? previo : {}), calendarios, elegidos, cuenta: sesion.email });
+      const porCalendario = await Promise.all(calendarios.filter((c) => elegidos.includes(c.id)).map(bajarEventos));
+      const eventos = porCalendario.flat();
       calendarioError = '';
-      escribirJSON(CLAVE_CALENDARIO, { ...cfg, eventos, cuenta: sesion.email, actualizado: new Date().toISOString() });
+      escribirJSON(CLAVE_CALENDARIO, { ...leerJSON(CLAVE_CALENDARIO), eventos, actualizado: new Date().toISOString() });
     } catch (e) { calendarioError = e.message; }
     pintarAgenda(); pintarAgendaGoogle();
   }
 
-  async function elegirCalendario() {
-    if (!permisoCalendar()) await pedirToken();
-    if (!permisoCalendar()) throw new Error('Falta el permiso de Google Calendar. Vuelve a pulsar y marca la casilla de Calendar.');
-    const r = await llamarCalendar('users/me/calendarList?minAccessRole=reader');
-    calendarios = (r.items || []).sort((a, b) => (a.primary ? 1 : 0) - (b.primary ? 1 : 0)); // los compartidos primero
-    pintarAgendaGoogle();
+  function cambiarElegido(id) {
+    const cfg = leerJSON(CLAVE_CALENDARIO);
+    const elegidos = cfg.elegidos.includes(id) ? cfg.elegidos.filter((x) => x !== id) : [...cfg.elegidos, id];
+    escribirJSON(CLAVE_CALENDARIO, { ...cfg, elegidos });
+    pintarAgenda(); pintarAgendaGoogle();
+    if (elegidos.includes(id)) cargarCalendario(); // al encender uno, se bajan sus citas
   }
 
   function pintarAgendaGoogle() {
@@ -1490,29 +1501,21 @@
       });
       return b;
     };
-    if (calendarios) {
-      const lista = el('select');
-      lista.setAttribute('aria-label', 'Calendario principal');
-      for (const c of calendarios) {
-        const op = el('option', null, `${c.summaryOverride || c.summary}${c.primary ? ' (el tuyo)' : ''}`);
-        op.value = c.id;
-        lista.append(op);
+    if (cfg?.calendarios && cfg.cuenta === sesion.email) {
+      for (const c of cfg.calendarios) {
+        const b = el('button', 'cal-boton');
+        b.type = 'button';
+        b.style.setProperty('--cal', c.color);
+        b.setAttribute('aria-pressed', String(cfg.elegidos.includes(c.id)));
+        b.append(el('span', 'cal-punto'), c.nombre);
+        b.addEventListener('click', () => cambiarElegido(c.id));
+        caja.append(b);
       }
-      caja.append(el('p', null, 'Elige el calendario compartido:'), lista,
-        boton('Usar este', async () => {
-          const c = calendarios.find((x) => x.id === lista.value);
-          escribirJSON(CLAVE_CALENDARIO, { principalId: c.id, principalNombre: c.summaryOverride || c.summary });
-          calendarios = null;
-          await cargarCalendario();
-        }),
-        boton('Cancelar', async () => { calendarios = null; pintarAgendaGoogle(); }));
-    } else if (!cfg?.principalId) {
-      caja.append(el('p', null, 'Conecta vuestro Google Calendar para ver aquí las citas.'), boton('Conectar Google Calendar', elegirCalendario));
-    } else {
-      const leyenda = (clase, texto) => { const s = el('span', 'agenda-leyenda'); s.append(el('span', clase), texto); return s; };
-      caja.append(leyenda('evento-punto', cfg.principalNombre), leyenda('evento-punto evento-punto--propio', 'Tu calendario'));
       if (!permisoCalendar()) caja.append(boton('Actualizar calendario', pedirToken));
-      caja.append(boton('Cambiar', elegirCalendario));
+    } else if (permisoCalendar()) {
+      caja.append(el('p', null, 'Cargando tus calendarios…'));
+    } else {
+      caja.append(el('p', null, 'Conecta Google Calendar para ver aquí tus citas.'), boton('Conectar Google Calendar', pedirToken));
     }
     if (calendarioError) caja.append(el('p', 'error', calendarioError));
   }
@@ -1609,9 +1612,9 @@
   }
   {
     const m2 = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 2, 9, 5);
-    const t = aCita({ id: 'x', summary: 'Médico', start: { dateTime: m2.toISOString() } }, 'propio');
-    const td = aCita({ id: 'y', start: { date: masDias(-1) } }, 'principal');
-    console.assert(t.fecha === masDias(2) && t.hora === '09:05' && t.id === 'g-x' && td.fecha === hoy && td.hora === '' && td.titulo === '(Sin título)', 'aCita');
+    const t = aCita({ id: 'x', summary: 'Médico', start: { dateTime: m2.toISOString() } }, { id: 'c1', color: '#f00' });
+    const td = aCita({ id: 'y', start: { date: masDias(-1) } }, { id: 'c2', color: '#0f0' });
+    console.assert(t.fecha === masDias(2) && t.hora === '09:05' && t.id === 'g-x' && t.cal === 'c1' && t.color === '#f00' && td.fecha === hoy && td.hora === '' && td.titulo === '(Sin título)', 'aCita');
   }
   console.assert(racha({ hechos: [masDias(-1), masDias(-2), masDias(-4)] }) === 2 && racha({ hechos: [hoy, masDias(-1)] }) === 2 && racha({ hechos: [] }) === 0, 'racha');
   console.assert(proximoCobro({ fecha: masDias(-30), periodo: 'mensual' }) >= hoy && proximoCobro({ fecha: masDias(5), periodo: 'anual' }) === masDias(5), 'proximoCobro');
