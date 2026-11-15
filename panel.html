@@ -29,6 +29,7 @@
     --suscripciones: #bf5af2;
     --habitos: #ffd60a;
     --compra: #ff375f;
+    --archivos: #64d2ff;
     --radio: 18px;
     --hueco: 16px;
   }
@@ -120,6 +121,21 @@
   /* Formularios */
   .formulario { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; background: var(--tarjeta-2); border-radius: 14px; }
   .formulario[hidden], .formulario label[hidden] { display: none; }
+  /* Archivos */
+  .archivos-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 14px; color: var(--texto-2); }
+  .archivos-barra:empty { display: none; }
+  .archivos-barra p { margin: 0; flex: 1 1 100%; }
+  .archivos-barra + #archivos-contenido { margin-top: 12px; }
+  .archivos-barra:empty + #archivos-contenido { margin-top: 0; }
+  .archivos-lista { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 24px; }
+  .archivo { border-top: 1px solid var(--linea); }
+  .archivo-enlace { display: flex; align-items: center; gap: 12px; padding: 10px 0; color: inherit; text-decoration: none; border-radius: 8px; }
+  .archivo-enlace:hover .archivo-nombre { color: var(--color); }
+  .archivo-ico { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--color); background: color-mix(in srgb, var(--color) 16%, transparent); }
+  .archivo-ico svg { width: 20px; height: 20px; }
+  .archivo-texto { min-width: 0; }
+  .archivo-nombre { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .archivo-meta { display: block; font-size: 13px; color: var(--texto-2); overflow-wrap: anywhere; }
   .duraciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -2px; }
   .duracion {
     font: inherit; font-size: 14px; font-weight: 600; color: var(--color); cursor: pointer; min-height: 34px;
@@ -486,6 +502,15 @@
       </form>
       <div id="compra-contenido"></div>
     </section>
+    <section class="area area--entera" style="--color: var(--archivos); --boton: #0b6e99" aria-labelledby="t-archivos">
+      <div class="area-cabecera">
+        <h2 id="t-archivos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Archivos</h2>
+        <button type="button" class="boton-texto" id="archivos-subir" hidden>Subir archivo</button>
+        <input type="file" id="archivos-input" hidden>
+      </div>
+      <div class="archivos-barra" id="archivos-barra" aria-live="polite"></div>
+      <div id="archivos-contenido"></div>
+    </section>
   </div>
 
   <footer class="pie">
@@ -594,7 +619,7 @@
   // Completa los apartados que falten (datos guardados con una versión anterior del panel).
   function completar(d) {
     const ej = d.ejemplo ? datosDeEjemplo() : {};
-    for (const [clave, vacio] of [['agenda', []], ['vence', []], ['dinero', []], ['suscripciones', []], ['habitos', []], ['compra', []]]) {
+    for (const [clave, vacio] of [['agenda', []], ['vence', []], ['dinero', []], ['suscripciones', []], ['habitos', []], ['compra', []], ['archivos', []]]) {
       if (!d[clave] || typeof d[clave] !== 'object') d[clave] = ej[clave] || vacio;
     }
     delete d.salud; // el apartado de salud se quitó el 15/11/2026
@@ -1134,7 +1159,44 @@
     formCompra.nombre.focus(); // listo para el siguiente artículo; la sección se queda
   });
 
-  function pintarTodo() { pintarAgenda(); pintarVence(); pintarDinero(); pintarSuscripciones(); pintarHabitos(); pintarCompra(); }
+  // ---------- Archivos: lo subido a Drive desde el panel (la lista la veis los dos) ----------
+  const fmtCorto = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
+  let archivosTodos = false;
+  function icoArchivo(tipo = '') {
+    const d = tipo.startsWith('image/') ? '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'
+      : tipo === 'application/pdf' ? '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 14h6M9 17h4"/>'
+      : '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/>';
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  }
+  function pintarArchivos() {
+    const caja = document.getElementById('archivos-contenido');
+    caja.replaceChildren();
+    const lista = [...datos.archivos].sort((a, b) => b.fecha.localeCompare(a.fecha));
+    if (!lista.length) { caja.append(el('p', 'vacio', 'Aún no habéis subido nada desde el panel.')); return; }
+    const ul = el('ul', 'archivos-lista');
+    for (const a of archivosTodos ? lista : lista.slice(0, 8)) {
+      const li = el('li', 'archivo');
+      const enlace = el('a', 'archivo-enlace');
+      if (/^https:\/\//.test(a.enlace)) enlace.href = a.enlace; // la lista viene del archivo compartido: solo enlaces web
+      enlace.target = '_blank'; enlace.rel = 'noopener';
+      const ico = el('span', 'archivo-ico'); ico.innerHTML = icoArchivo(a.tipo);
+      const texto = el('span', 'archivo-texto');
+      texto.append(el('span', 'archivo-nombre', a.nombre),
+        el('span', 'archivo-meta', [fmtCorto.format(new Date(a.fecha)), a.por, a.carpeta && `en «${a.carpeta}»`].filter(Boolean).join(' · ')));
+      enlace.append(ico, texto);
+      li.append(enlace);
+      ul.append(li);
+    }
+    caja.append(ul);
+    if (lista.length > 8) {
+      const mas = el('button', 'boton-texto', archivosTodos ? 'Ver menos' : `Ver los ${lista.length}`);
+      mas.type = 'button';
+      mas.addEventListener('click', () => { archivosTodos = !archivosTodos; pintarArchivos(); });
+      caja.append(mas);
+    }
+  }
+
+  function pintarTodo() { pintarAgenda(); pintarVence(); pintarDinero(); pintarSuscripciones(); pintarHabitos(); pintarCompra(); pintarArchivos(); }
   pintarTodo();
 
   // ---------- Copia de seguridad y datos de ejemplo ----------
@@ -1175,7 +1237,7 @@
     let nuevo;
     try { nuevo = JSON.parse(await archivo.text()); } catch { nuevo = null; }
     const valido = nuevo && typeof nuevo === 'object' && !Array.isArray(nuevo) &&
-      ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra'].some((k) => k in nuevo);
+      ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra', 'archivos'].some((k) => k in nuevo);
     if (!valido) { avisar('Ese archivo no es una copia del panel. Elige un archivo «panel-de-vida-….json».', true); return; }
     if (!confirm('Cargar esta copia sustituye todos los datos que hay ahora en este navegador. ¿Seguir?')) return;
     for (const k of Object.keys(datos)) delete datos[k];
@@ -1187,7 +1249,7 @@
   // Quita solo lo que venía de ejemplo; lo que hayas añadido tú se queda.
   const ID_EJEMPLO = /^(e|v|d|s|h|c)\d+$/;
   function quitarEjemplos() {
-    for (const k of ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra']) datos[k] = datos[k].filter((x) => !ID_EJEMPLO.test(x.id));
+    for (const k of ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra', 'archivos']) datos[k] = datos[k].filter((x) => !ID_EJEMPLO.test(x.id));
     datos.ejemplo = false;
   }
   document.getElementById('ejemplo-borrar').addEventListener('click', () => {
@@ -1209,7 +1271,7 @@
   const CLAVE_SELECTOR = 'AIzaSyCfF_y76_iluT8MZSG1gumD__w7-92s5xY'; // solo sirve para el selector de Drive y solo desde vuestra dirección
   const NUMERO_PROYECTO = '786823678377';
   const NOMBRE_ARCHIVO = 'panel-de-vida-datos.json';
-  const COLECCIONES = ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra'];
+  const COLECCIONES = ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra', 'archivos'];
   const CLAVE_DRIVE = 'panel-drive';   // {archivoId, carpetaId, propio, base, sincronizado}
   const CLAVE_TOKEN = 'panel-token';   // {valor, caduca}
   let clienteToken = null;
@@ -1688,6 +1750,92 @@
     if (calendarioError) caja.append(el('p', 'error', calendarioError));
   }
 
+  // ---------- Subir archivos a Drive: foto o archivo → eliges la carpeta → se sube ----------
+  let archivoPendiente = null, archivosEstado = '', archivosError = false, subiendo = false;
+  const entradaArchivo = document.getElementById('archivos-input');
+  document.getElementById('archivos-subir').addEventListener('click', () => entradaArchivo.click());
+  entradaArchivo.addEventListener('change', () => {
+    archivoPendiente = entradaArchivo.files[0] || null;
+    entradaArchivo.value = '';
+    if (archivoPendiente) continuarSubida();
+  });
+
+  // Selector de Drive en modo carpetas: las tuyas y las que te han compartido (solo se da acceso a la que elijas)
+  async function elegirCarpeta(nombre) {
+    const token = tokenValido();
+    await cargarSelector();
+    return new Promise((ok) => {
+      const vista = (etiqueta) => new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+        .setSelectFolderEnabled(true).setIncludeFolders(true).setMimeTypes('application/vnd.google-apps.folder').setLabel(etiqueta);
+      new google.picker.PickerBuilder()
+        .addView(vista('Mis carpetas').setParent('root'))
+        .addView(vista('Compartidas conmigo').setOwnedByMe(false))
+        .setOAuthToken(token).setDeveloperKey(CLAVE_SELECTOR).setAppId(NUMERO_PROYECTO)
+        .setLocale('es').setTitle(`¿En qué carpeta guardas «${nombre}»?`)
+        .setCallback((r) => {
+          if (r.action === google.picker.Action.PICKED) ok({ id: r.docs[0].id, nombre: r.docs[0].name });
+          else if (r.action === google.picker.Action.CANCEL) ok(null);
+        })
+        .build().setVisible(true);
+    });
+  }
+
+  // Subida «reanudable» de Google: admite fotos y archivos grandes en una sola petición
+  async function subirArchivo(archivo, carpeta) {
+    const tipo = archivo.type || 'application/octet-stream';
+    const inicio = await llamarDrive(`${DRIVE_SUBIDA}files?uploadType=resumable&fields=id,name,mimeType,webViewLink`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': tipo },
+      body: JSON.stringify({ name: archivo.name, parents: [carpeta.id] }),
+    });
+    const destino = inicio.headers.get('Location');
+    if (!destino) throw new Error('Google no ha dejado empezar la subida.');
+    const resp = await fetch(destino, { method: 'PUT', headers: { 'Content-Type': tipo }, body: archivo });
+    if (!resp.ok) throw new Error(`Drive respondió con un error al subir (${resp.status}).`);
+    return resp.json();
+  }
+
+  async function continuarSubida() {
+    if (!tokenValido()) return pintarArchivosAcciones(); // hace falta un toque para el permiso: lo pide el botón «Elegir carpeta»
+    const archivo = archivoPendiente;
+    try {
+      const carpeta = await elegirCarpeta(archivo.name);
+      if (!carpeta) { archivoPendiente = null; archivosEstado = ''; return pintarArchivosAcciones(); }
+      subiendo = true; archivosError = false;
+      archivosEstado = `Subiendo «${archivo.name}» a «${carpeta.nombre}»…`;
+      pintarArchivosAcciones();
+      const f = await subirArchivo(archivo, carpeta);
+      datos.archivos.push({ id: f.id, nombre: f.name, tipo: f.mimeType, enlace: f.webViewLink, carpeta: carpeta.nombre, fecha: new Date().toISOString(), por: sesion.nombre });
+      guardar(); pintarArchivos();
+      archivosEstado = `«${f.name}» subido a «${carpeta.nombre}».`;
+    } catch (e) {
+      archivosError = true;
+      archivosEstado = `No se pudo subir «${archivo.name}»: ${e.message}`;
+    }
+    archivoPendiente = null; subiendo = false;
+    pintarArchivosAcciones();
+  }
+
+  function pintarArchivosAcciones() {
+    const barra = document.getElementById('archivos-barra');
+    const puede = location.protocol.startsWith('http') && !!sesion;
+    document.getElementById('archivos-subir').hidden = !puede || subiendo;
+    barra.replaceChildren();
+    if (!puede) return barra.append(el('p', null, location.protocol.startsWith('http') ? 'Entra con Google para subir archivos a vuestro Drive.' : 'Para subir archivos, abre el panel desde su dirección.'));
+    if (archivoPendiente && !subiendo) {
+      const elegir = el('button', 'boton boton--principal', 'Elegir carpeta');
+      elegir.type = 'button';
+      elegir.addEventListener('click', async () => {
+        try { await pedirToken(); continuarSubida(); } catch (e) { archivosError = true; archivosEstado = e.message; pintarArchivosAcciones(); }
+      });
+      const cancelar = el('button', 'boton', 'Cancelar');
+      cancelar.type = 'button';
+      cancelar.addEventListener('click', () => { archivoPendiente = null; archivosEstado = ''; pintarArchivosAcciones(); });
+      barra.append(el('p', null, `«${archivoPendiente.name}» listo. Toca para dar permiso a Google y elegir la carpeta.`), elegir, cancelar);
+      return;
+    }
+    if (archivosEstado) barra.append(el('p', archivosError ? 'error' : null, archivosEstado));
+  }
+
   // ---------- Entrar con Google: cada uno con su cuenta ----------
   // Solo funciona con el panel publicado (Google no acepta páginas abiertas con doble clic).
   const CLIENTE_GOOGLE = '786823678377-ffdiajgej160p2kkomiqnh8illckbj8q.apps.googleusercontent.com';
@@ -1735,6 +1883,7 @@
     }
     pintarDrive();
     pintarAgendaGoogle();
+    pintarArchivosAcciones();
   }
 
   function alEntrar(respuesta) {
