@@ -119,7 +119,7 @@
 
   /* Formularios */
   .formulario { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; background: var(--tarjeta-2); border-radius: 14px; }
-  .formulario[hidden] { display: none; }
+  .formulario[hidden], .formulario label[hidden] { display: none; }
   .duraciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -2px; }
   .duracion {
     font: inherit; font-size: 14px; font-weight: 600; color: var(--color); cursor: pointer; min-height: 34px;
@@ -377,8 +377,8 @@
         <label>Qué<input name="titulo" maxlength="80" placeholder="Ej.: Dentista" required></label>
         <label>Día<input name="fecha" type="date" required></label>
         <div class="fila">
-          <label>Hora (opcional)<input name="hora" type="time"></label>
-          <label>Hasta (opcional)<input name="hasta" type="time"></label>
+          <label>Hora (opcional)<select name="hora"><option value="">Sin hora</option></select></label>
+          <label>Hasta (opcional)<select name="hasta"><option value="">—</option></select></label>
         </div>
         <div class="duraciones" role="group" aria-label="Duración">
           <button type="button" class="duracion" data-minutos="30">30 min</button>
@@ -992,6 +992,15 @@
     });
   }
 
+  // Horas de la cita de 10 en 10 minutos («Hasta» también admite 23:59, el tope de los botones de duración)
+  {
+    const f = document.getElementById('agenda-form');
+    const horas = Array.from({ length: 144 }, (_, i) => `${String(Math.floor(i / 6)).padStart(2, '0')}:${String(i % 6 * 10).padStart(2, '0')}`);
+    const opcion = (h) => { const o = el('option', null, h); o.value = h; return o; };
+    f.hora.append(...horas.map(opcion));
+    f.hasta.append(...horas.map(opcion), opcion('23:59'));
+  }
+
   // Duración rápida: rellena «Hasta» a partir de la hora (sin pasar de medianoche)
   for (const b of document.querySelectorAll('#agenda-form .duracion')) {
     b.addEventListener('click', () => {
@@ -1531,6 +1540,7 @@
 
   // --- Apuntar y borrar citas en Google Calendar ---
   function calendariosEscribibles() {
+    if (!sesion) return [];
     const cfg = leerJSON(CLAVE_CALENDARIO);
     return sesion && cfg?.cuenta === sesion.email ? (cfg.calendarios || []).filter((c) => c.escribe) : [];
   }
