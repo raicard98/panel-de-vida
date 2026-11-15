@@ -1,0 +1,1101 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#000000">
+<!-- Privacidad: este panel no se conecta a internet ni envía nada. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'self'; form-action 'none'">
+<title>Panel de vida</title>
+<!-- App instalable: ficha, icono y nombre en la pantalla de inicio -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icono-192.png">
+<link rel="apple-touch-icon" href="icons/icono-apple-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Panel">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<style>
+  :root {
+    --fondo: #000;
+    --tarjeta: #1c1c1e;
+    --tarjeta-2: #2c2c2e;
+    --linea: #38383a;
+    --texto: #f5f5f7;
+    --texto-2: #a1a1a6;
+    --agenda: #0a84ff;
+    --vence: #ff9f0a;
+    --dinero: #30d158;
+    --suscripciones: #bf5af2;
+    --habitos: #ffd60a;
+    --compra: #ff375f;
+    --radio: 18px;
+    --hueco: 16px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--texto);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: color-mix(in srgb, var(--agenda) 45%, transparent); color: #fff; }
+  :focus-visible { outline: 2px solid var(--agenda); outline-offset: 3px; border-radius: 8px; }
+  html { scrollbar-color: var(--tarjeta-2) var(--fondo); }
+
+  .pagina {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: max(28px, env(safe-area-inset-top)) max(var(--hueco), env(safe-area-inset-right)) 48px max(var(--hueco), env(safe-area-inset-left));
+  }
+
+  .cabecera { margin-bottom: 28px; }
+  .fecha {
+    margin: 0 0 2px;
+    color: var(--texto-2);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .saludo {
+    margin: 0;
+    font-size: clamp(32px, 6vw, 44px);
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .rejilla {
+    display: grid;
+    gap: var(--hueco);
+    grid-template-columns: repeat(6, 1fr);
+  }
+  .area {
+    grid-column: span 2;
+    background: var(--tarjeta);
+    border-radius: var(--radio);
+    padding: 18px 18px 20px;
+    min-height: 168px;
+  }
+  .area--ancha { grid-column: span 3; }
+  .area--entera { grid-column: 1 / -1; }
+  .area h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color);
+  }
+  .area h2 svg { width: 18px; height: 18px; flex: none; }
+  .area .vacio { margin: 0; color: var(--texto-2); font-size: 15px; max-width: 40ch; }
+
+  /* Cabecera de cada apartado con su botón */
+  .area-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .area-cabecera h2 { margin: 0; }
+  .boton-texto {
+    font: inherit; font-size: 15px; font-weight: 600;
+    color: var(--color); background: none; border: 0; padding: 6px 4px; cursor: pointer; border-radius: 8px;
+  }
+  .boton-texto:hover { opacity: .8; }
+
+  /* Formularios */
+  .formulario { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; background: var(--tarjeta-2); border-radius: 14px; }
+  .formulario[hidden] { display: none; }
+  .formulario .fila { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .formulario label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--texto-2); }
+  .formulario input {
+    font: inherit; font-size: 16px; color: var(--texto);
+    background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 10px;
+    padding: 9px 10px; min-width: 0; width: 100%; color-scheme: dark;
+  }
+  .formulario input:focus-visible { outline: 2px solid var(--color); outline-offset: 1px; }
+  .formulario .acciones { display: flex; gap: 8px; justify-content: flex-end; }
+  .boton {
+    font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+    border: 0; border-radius: 10px; padding: 9px 16px;
+    background: var(--tarjeta); color: var(--texto);
+  }
+  .boton--principal { background: var(--boton, var(--color)); color: #fff; }
+  .boton:hover { filter: brightness(1.12); }
+  .error { margin: 0; color: #ff6961; font-size: 14px; }
+
+  /* Agenda */
+  .agenda-dia + .agenda-dia { margin-top: 14px; }
+  .agenda-dia h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--texto-2); }
+  .agenda-lista { list-style: none; margin: 0; padding: 0; }
+  .evento {
+    display: grid; grid-template-columns: 58px 10px 1fr auto; align-items: center; gap: 10px;
+    padding: 8px 0; border-top: 1px solid var(--linea);
+  }
+  .agenda-lista li:first-child { border-top: 0; }
+  .evento-hora { font-size: 15px; font-weight: 600; }
+  .evento-hora small { display: block; font-size: 12px; font-weight: 500; color: var(--texto-2); }
+  .evento-punto { width: 10px; height: 10px; border-radius: 50%; background: var(--agenda); }
+  .evento-texto { min-width: 0; }
+  .evento-titulo { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  .evento-lugar { display: block; font-size: 14px; color: var(--texto-2); overflow-wrap: anywhere; }
+  .evento--pasado { opacity: .7; }
+  .evento--pasado .evento-lugar { display: none; }
+  .evento--pasado .evento-punto { background: var(--texto-2); }
+  .chip {
+    display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; vertical-align: 1px;
+    font-size: 12px; font-weight: 600; color: var(--color); background: color-mix(in srgb, var(--color) 18%, transparent);
+  }
+  .borrar {
+    width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer;
+    background: none; border: 0; border-radius: 50%; color: var(--texto-2); opacity: 0;
+  }
+  .evento:hover .borrar, .borrar:focus-visible { opacity: 1; }
+  .borrar:hover { background: var(--tarjeta-2); color: var(--texto); }
+  .borrar svg { width: 16px; height: 16px; }
+  @media (hover: none) { .borrar { opacity: 1; } }
+
+  /* Lo que vence */
+  .resumen { margin: 0 0 12px; color: var(--texto-2); font-size: 15px; }
+  .resumen strong { color: var(--texto); font-size: 22px; font-weight: 700; margin-right: 4px; }
+  .resumen .alerta { color: #ff6961; font-weight: 600; }
+  .vence {
+    display: grid; grid-template-columns: 46px 1fr auto 32px; align-items: center; gap: 12px;
+    padding: 8px 0; border-top: 1px solid var(--linea);
+  }
+  .vence-fecha {
+    display: grid; place-items: center; height: 46px; border-radius: 12px; background: var(--tarjeta-2);
+    line-height: 1.05;
+  }
+  .vence-fecha b { font-size: 18px; }
+  .vence-fecha span { font-size: 12px; color: var(--texto-2); }
+  .vence-texto { min-width: 0; }
+  .vence-titulo { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  .vence-estado { display: block; font-size: 14px; color: var(--texto-2); }
+  .vence--pronto .vence-estado { color: var(--vence); }
+  .vence--urgente .vence-estado { color: #ff6961; font-weight: 600; }
+  .vence--urgente .vence-fecha { background: color-mix(in srgb, #ff453a 22%, transparent); }
+  .vence-importe { font-weight: 600; white-space: nowrap; }
+  .hecho {
+    width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer; padding: 0;
+    background: none; border: 2px solid #6e6e73; border-radius: 50%; color: transparent;
+  }
+  .vence--hecho { grid-template-columns: 1fr auto; color: var(--texto-2); min-height: 62px; }
+  .hecho:hover { border-color: var(--dinero); color: var(--dinero); }
+  .hecho svg { width: 16px; height: 16px; }
+  .mas { margin: 8px 0 0; font-size: 14px; color: var(--texto-2); }
+
+  /* Dinero */
+  .formulario select {
+    font: inherit; font-size: 16px; color: var(--texto); background: var(--tarjeta);
+    border: 1px solid var(--linea); border-radius: 10px; padding: 9px 10px; width: 100%; color-scheme: dark;
+  }
+  .formulario select:focus-visible { outline: 2px solid var(--color); outline-offset: 1px; }
+  .cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 16px; }
+  .cifras div { padding: 0 0 0 12px; border-left: 1px solid var(--linea); min-width: 0; }
+  .cifras div:first-child { border-left: 0; padding-left: 0; }
+  .cifras dt { font-size: 12px; font-weight: 600; color: var(--texto-2); }
+  .cifras dd { margin: 0; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cifras .positivo { color: var(--dinero); }
+  .cifras .negativo { color: #ff6961; }
+  .subtitulo { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--texto-2); }
+  .barras { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 9px; }
+  .barra-fila { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; margin-bottom: 4px; }
+  .barra-fila span:last-child { font-weight: 600; }
+  .barra { height: 8px; border-radius: 4px; background: var(--tarjeta-2); overflow: hidden; }
+  .barra i { display: block; height: 100%; border-radius: 4px; background: var(--dinero); }
+  .mov { display: grid; grid-template-columns: 1fr auto 32px; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--linea); }
+  .mov-texto { min-width: 0; }
+  .mov-texto b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  .mov-texto span { font-size: 13px; color: var(--texto-2); }
+  .mov-importe { font-weight: 600; white-space: nowrap; }
+  .mov-importe.ingreso { color: var(--dinero); }
+  .mov:hover .borrar { opacity: 1; }
+
+  /* Suscripciones */
+  .reparto { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; margin: 0 0 14px; }
+  .reparto i { display: block; background: var(--suscripciones); }
+  .sus { display: grid; grid-template-columns: 1fr auto 32px; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--linea); }
+  .sus-texto { min-width: 0; }
+  .sus-texto b { display: flex; align-items: center; gap: 8px; font-weight: 600; overflow-wrap: anywhere; }
+  .sus-texto b i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--suscripciones); }
+  .sus-texto span { font-size: 13px; color: var(--texto-2); }
+  .sus--pronto .sus-texto span { color: var(--suscripciones); font-weight: 600; }
+  .sus-importe { font-weight: 600; white-space: nowrap; text-align: right; }
+  .sus-importe small { display: block; font-size: 12px; font-weight: 500; color: var(--texto-2); }
+  .sus:hover .borrar { opacity: 1; }
+
+  /* Hábitos */
+  .habito { padding: 10px 0; border-top: 1px solid var(--linea); }
+  .habito-cabeza { display: grid; grid-template-columns: 1fr auto 32px; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .habito-cabeza b { font-weight: 600; overflow-wrap: anywhere; }
+  .racha { font-size: 13px; color: var(--texto-2); white-space: nowrap; }
+  .racha--viva { color: var(--habitos); font-weight: 600; }
+  .habito:hover .borrar { opacity: 1; }
+  .semana { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .dia-boton {
+    display: grid; justify-items: center; gap: 3px; padding: 0; cursor: pointer;
+    background: none; border: 0; color: var(--texto-2); font: inherit; font-size: 11px; font-weight: 600;
+  }
+  .dia-boton span {
+    display: grid; place-items: center; width: 100%; max-width: 36px; aspect-ratio: 1; border-radius: 10px;
+    background: var(--tarjeta-2); color: transparent;
+  }
+  .dia-boton svg { width: 14px; height: 14px; }
+  .dia-boton[aria-pressed="true"] span { background: var(--habitos); color: #1c1c1e; }
+  .dia-boton--hoy { color: var(--texto); }
+  .dia-boton--hoy span { box-shadow: inset 0 0 0 2px var(--habitos); }
+  .dia-boton:hover span { filter: brightness(1.2); }
+
+
+  /* Lista de la compra */
+  .compra-anadir { display: grid; grid-template-columns: 1fr 110px 190px auto; gap: 8px; margin: 0 0 16px; }
+  .compra-anadir input, .compra-anadir select {
+    font: inherit; font-size: 16px; color: var(--texto); background: var(--tarjeta-2);
+    border: 1px solid var(--linea); border-radius: 10px; padding: 9px 10px; min-width: 0; width: 100%; color-scheme: dark;
+  }
+  .compra-anadir input:focus-visible, .compra-anadir select:focus-visible { outline: 2px solid var(--color); outline-offset: 1px; }
+  .compra-anadir .error { grid-column: 1 / -1; }
+  .pasillos { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 24px; align-items: start; }
+  .pasillo h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--texto-2); }
+  .pasillo + .pasillo { margin-top: 0; }
+  .pasillo { margin-bottom: 12px; }
+  .articulo { display: grid; grid-template-columns: 32px 1fr; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--linea); }
+  .agenda-lista .articulo:first-child { border-top: 0; }
+  .articulo-texto { min-width: 0; overflow-wrap: anywhere; }
+  .articulo-texto small { margin-left: 6px; font-size: 14px; color: var(--texto-2); }
+  .articulo--hecho .articulo-texto { color: var(--texto-2); text-decoration: line-through; }
+  .articulo .hecho:hover { border-color: var(--compra); color: var(--compra); }
+  .articulo--hecho .hecho { background: var(--compra); border-color: var(--compra); color: #1c1c1e; }
+  .comprados-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  @media (max-width: 600px) {
+    .compra-anadir { grid-template-columns: 1fr 96px; }
+    .compra-anadir select { grid-column: 1; }
+  }
+
+  /* Pie: copia de seguridad */
+  .pie { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--linea); }
+  .pie-texto { margin: 0 0 12px; color: var(--texto-2); font-size: 14px; max-width: 70ch; }
+  .pie-botones { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pie .boton { background: var(--tarjeta); }
+  .boton--peligro { color: #ff6961; }
+  .pie-aviso { margin: 10px 0 0; min-height: 1.4em; font-size: 14px; color: var(--dinero); }
+  .pie-aviso.mal { color: #ff6961; }
+
+  @media (max-width: 900px) {
+    .rejilla { grid-template-columns: repeat(2, 1fr); }
+    .area, .area--ancha, .area--entera { grid-column: span 1; }
+  }
+  @media (max-width: 600px) {
+    /* En el móvil, lo urgente primero */
+    section[aria-labelledby="t-vence"] { order: -1; }
+    .rejilla { grid-template-columns: 1fr; gap: 12px; }
+    .area { min-height: 0; }
+    .cabecera { margin-bottom: 20px; }
+  }
+</style>
+</head>
+<body>
+<main class="pagina">
+  <header class="cabecera">
+    <p class="fecha" id="fecha">&nbsp;</p>
+    <h1 class="saludo" id="saludo">Hola</h1>
+  </header>
+
+  <div class="rejilla">
+    <section class="area area--ancha" style="--color: var(--agenda); --boton: #0066d6" aria-labelledby="t-agenda">
+      <div class="area-cabecera">
+        <h2 id="t-agenda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Agenda</h2>
+        <button type="button" class="boton-texto" id="agenda-abrir" aria-expanded="false" aria-controls="agenda-form">Añadir cita</button>
+      </div>
+      <form class="formulario" id="agenda-form" hidden novalidate>
+        <label>Qué<input name="titulo" maxlength="80" placeholder="Ej.: Dentista" required></label>
+        <div class="fila">
+          <label>Día<input name="fecha" type="date" required></label>
+          <label>Hora (opcional)<input name="hora" type="time"></label>
+        </div>
+        <label>Dónde (opcional)<input name="lugar" maxlength="80"></label>
+        <p class="error" id="agenda-error" role="alert" hidden></p>
+        <div class="acciones">
+          <button type="button" class="boton" data-cancelar>Cancelar</button>
+          <button type="submit" class="boton boton--principal">Guardar</button>
+        </div>
+      </form>
+      <div id="agenda-contenido"></div>
+    </section>
+    <section class="area area--ancha" style="--color: var(--vence); --boton: #c25e00" aria-labelledby="t-vence">
+      <div class="area-cabecera">
+        <h2 id="t-vence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>Lo que vence</h2>
+        <button type="button" class="boton-texto" id="vence-abrir" aria-expanded="false" aria-controls="vence-form">Añadir</button>
+      </div>
+      <form class="formulario" id="vence-form" hidden novalidate>
+        <label>Qué<input name="titulo" maxlength="80" placeholder="Ej.: Recibo de la luz" required></label>
+        <div class="fila">
+          <label>Fecha límite<input name="fecha" type="date" required></label>
+          <label>Importe en € (opcional)<input name="importe" inputmode="decimal" placeholder="0,00"></label>
+        </div>
+        <p class="error" id="vence-error" role="alert" hidden></p>
+        <div class="acciones">
+          <button type="button" class="boton" data-cancelar>Cancelar</button>
+          <button type="submit" class="boton boton--principal">Guardar</button>
+        </div>
+      </form>
+      <div id="vence-contenido"></div>
+    </section>
+    <section class="area" style="--color: var(--dinero); --boton: #1a7f37" aria-labelledby="t-dinero">
+      <div class="area-cabecera">
+        <h2 id="t-dinero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 6.5A6.5 6.5 0 1 0 17 17.5M4 10h9M4 14h9"/></svg><span id="dinero-titulo">Dinero del mes</span></h2>
+        <button type="button" class="boton-texto" id="dinero-abrir" aria-expanded="false" aria-controls="dinero-form">Añadir</button>
+      </div>
+      <form class="formulario" id="dinero-form" hidden novalidate>
+        <label>Concepto<input name="concepto" maxlength="60" placeholder="Ej.: Supermercado" required></label>
+        <div class="fila">
+          <label>Tipo<select name="tipo"><option value="gasto">Gasto</option><option value="ingreso">Ingreso</option></select></label>
+          <label>Importe en €<input name="importe" inputmode="decimal" placeholder="0,00" required></label>
+        </div>
+        <div class="fila">
+          <label>Categoría<select name="categoria"></select></label>
+          <label>Día<input name="fecha" type="date" required></label>
+        </div>
+        <p class="error" id="dinero-error" role="alert" hidden></p>
+        <div class="acciones">
+          <button type="button" class="boton" data-cancelar>Cancelar</button>
+          <button type="submit" class="boton boton--principal">Guardar</button>
+        </div>
+      </form>
+      <div id="dinero-contenido"></div>
+    </section>
+    <section class="area" style="--color: var(--suscripciones); --boton: #8e3fc4" aria-labelledby="t-suscripciones">
+      <div class="area-cabecera">
+        <h2 id="t-suscripciones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/></svg>Suscripciones</h2>
+        <button type="button" class="boton-texto" id="sus-abrir" aria-expanded="false" aria-controls="sus-form">Añadir</button>
+      </div>
+      <form class="formulario" id="sus-form" hidden novalidate>
+        <label>Nombre<input name="nombre" maxlength="40" placeholder="Ej.: Netflix" required></label>
+        <div class="fila">
+          <label>Importe en €<input name="importe" inputmode="decimal" placeholder="0,00" required></label>
+          <label>Se paga<select name="periodo"><option value="mensual">Cada mes</option><option value="anual">Cada año</option></select></label>
+        </div>
+        <label>Próximo cobro<input name="fecha" type="date" required></label>
+        <p class="error" id="sus-error" role="alert" hidden></p>
+        <div class="acciones">
+          <button type="button" class="boton" data-cancelar>Cancelar</button>
+          <button type="submit" class="boton boton--principal">Guardar</button>
+        </div>
+      </form>
+      <div id="sus-contenido"></div>
+    </section>
+    <section class="area" style="--color: var(--habitos); --boton: #8a6d00" aria-labelledby="t-habitos">
+      <div class="area-cabecera">
+        <h2 id="t-habitos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Hábitos</h2>
+        <button type="button" class="boton-texto" id="hab-abrir" aria-expanded="false" aria-controls="hab-form">Añadir</button>
+      </div>
+      <form class="formulario" id="hab-form" hidden novalidate>
+        <label>Nuevo hábito<input name="nombre" maxlength="40" placeholder="Ej.: Leer 20 minutos" required></label>
+        <p class="error" id="hab-error" role="alert" hidden></p>
+        <div class="acciones">
+          <button type="button" class="boton" data-cancelar>Cancelar</button>
+          <button type="submit" class="boton boton--principal">Guardar</button>
+        </div>
+      </form>
+      <div id="hab-contenido"></div>
+    </section>
+    <section class="area area--entera" style="--color: var(--compra); --boton: #c41e45" aria-labelledby="t-compra">
+      <div class="area-cabecera">
+        <h2 id="t-compra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>Lista de la compra</h2>
+      </div>
+      <form class="compra-anadir" id="compra-form" novalidate>
+        <input name="nombre" maxlength="60" placeholder="Añadir artículo, ej.: Leche" aria-label="Artículo">
+        <input name="cantidad" maxlength="20" placeholder="Cantidad" aria-label="Cantidad (opcional)">
+        <select name="seccion" aria-label="Sección del súper"></select>
+        <button type="submit" class="boton boton--principal">Añadir</button>
+        <p class="error" id="compra-error" role="alert" hidden></p>
+      </form>
+      <div id="compra-contenido"></div>
+    </section>
+  </div>
+
+  <footer class="pie">
+    <p class="pie-texto" id="pie-texto">Tus datos se guardan solo en este navegador y no se envían a ningún sitio.</p>
+    <div class="pie-botones">
+      <button type="button" class="boton" id="copia-guardar">Guardar copia</button>
+      <button type="button" class="boton" id="copia-cargar">Cargar copia</button>
+      <input type="file" id="copia-archivo" accept=".json,application/json" hidden>
+      <button type="button" class="boton boton--peligro" id="ejemplo-borrar" hidden>Borrar datos de ejemplo</button>
+    </div>
+    <p class="pie-aviso" id="pie-aviso" role="status"></p>
+  </footer>
+</main>
+
+<script>
+  // Fecha y saludo en español de España, según la hora del ordenador.
+  const ahora = new Date();
+  const fecha = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(ahora);
+  document.getElementById('fecha').textContent = fecha.charAt(0).toUpperCase() + fecha.slice(1);
+  const h = ahora.getHours();
+  document.getElementById('saludo').textContent =
+    h >= 6 && h < 14 ? 'Buenos días' : h >= 14 && h < 21 ? 'Buenas tardes' : 'Buenas noches';
+
+  // ---------- Datos: solo en este navegador (localStorage), nunca salen de aquí ----------
+  const CLAVE = 'panel-de-vida';
+  // Fecha local en formato AAAA-MM-DD (para guardar y comparar días).
+  const diaISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const masDias = (n) => { const d = new Date(ahora); d.setDate(d.getDate() + n); return diaISO(d); };
+  const hoy = diaISO(ahora);
+
+  function datosDeEjemplo() {
+    return {
+      ejemplo: true,
+      agenda: [
+        { id: 'e1', titulo: 'Café con Laura', fecha: hoy, hora: '09:30', lugar: 'Café Central' },
+        { id: 'e2', titulo: 'Clase de yoga', fecha: hoy, hora: '18:00', lugar: 'Gimnasio del barrio' },
+        { id: 'e3', titulo: 'Comida familiar', fecha: masDias(1), hora: '14:00', lugar: 'Casa de mis padres' },
+        { id: 'e4', titulo: 'Reunión de equipo', fecha: masDias(2), hora: '09:00', lugar: '' },
+        { id: 'e5', titulo: 'Dentista', fecha: masDias(3), hora: '17:15', lugar: 'Clínica dental' },
+        { id: 'e6', titulo: 'Cumpleaños de Marta', fecha: masDias(5), hora: '', lugar: '' },
+      ],
+      vence: [
+        { id: 'v1', titulo: 'Devolver libro a la biblioteca', fecha: masDias(-1), importe: null },
+        { id: 'v2', titulo: 'Recibo de la luz', fecha: masDias(2), importe: 68.4 },
+        { id: 'v3', titulo: 'ITV del coche', fecha: masDias(4), importe: 41.6 },
+        { id: 'v4', titulo: 'IBI (contribución)', fecha: masDias(9), importe: 412.35 },
+        { id: 'v5', titulo: 'Seguro del coche', fecha: masDias(21), importe: 389 },
+        { id: 'v6', titulo: 'Renovar el DNI', fecha: masDias(48), importe: 12 },
+      ],
+      dinero: [
+        ['ingreso', 'Nómina', 2450, 'Ingresos', 1],
+        ['gasto', 'Alquiler', 850, 'Casa', 1],
+        ['gasto', 'Supermercado', 86.4, 'Comida', 2],
+        ['gasto', 'Gasolina', 60, 'Transporte', 4],
+        ['gasto', 'Supermercado', 54.2, 'Comida', 7],
+        ['gasto', 'Cena con amigos', 45.5, 'Ocio', 8],
+        ['gasto', 'Farmacia', 18.9, 'Salud', 10],
+        ['gasto', 'Zapatillas', 79.99, 'Compras', 11],
+        ['gasto', 'Supermercado', 112.75, 'Comida', 13],
+        ['gasto', 'Cine', 19, 'Ocio', 14],
+      ].map(([tipo, concepto, importe, categoria, dia], i) => ({
+        id: 'd' + i, tipo, concepto, importe, categoria,
+        fecha: diaISO(new Date(ahora.getFullYear(), ahora.getMonth(), Math.min(dia, ahora.getDate()))),
+      })),
+      suscripciones: [
+        { id: 's1', nombre: 'Gimnasio', importe: 39.9, periodo: 'mensual', fecha: masDias(17) },
+        { id: 's2', nombre: 'Netflix', importe: 13.99, periodo: 'mensual', fecha: masDias(6) },
+        { id: 's3', nombre: 'Spotify', importe: 11.99, periodo: 'mensual', fecha: masDias(12) },
+        { id: 's4', nombre: 'Amazon Prime', importe: 49.9, periodo: 'anual', fecha: masDias(90) },
+        { id: 's5', nombre: 'iCloud', importe: 2.99, periodo: 'mensual', fecha: masDias(1) },
+      ],
+      // Patrón de días hechos (1) en las últimas 3 semanas, del más antiguo a hoy.
+      habitos: [
+        ['h1', 'Leer 20 minutos', '101101111011011111110'],
+        ['h2', 'Caminar 30 minutos', '110110100111011010110'],
+        ['h3', 'Meditar', '000100110010011101111'],
+        ['h4', 'Sin pantallas antes de dormir', '100010011000110101000'],
+      ].map(([id, nombre, patron]) => ({
+        id, nombre, hechos: [...patron].flatMap((c, i) => (c === '1' ? [masDias(i - patron.length + 1)] : [])),
+      })),
+      compra: [
+        ['c1', 'Plátanos', '1 kg', 'Fruta y verdura', false],
+        ['c2', 'Tomates', '6', 'Fruta y verdura', false],
+        ['c3', 'Pechuga de pollo', '500 g', 'Carne y pescado', false],
+        ['c4', 'Leche', '6 l', 'Lácteos y huevos', false],
+        ['c5', 'Huevos', '12', 'Lácteos y huevos', true],
+        ['c6', 'Pan de molde', '', 'Panadería', false],
+        ['c7', 'Aceite de oliva', '1 l', 'Despensa', false],
+        ['c8', 'Arroz', '', 'Despensa', true],
+        ['c9', 'Detergente', '', 'Limpieza y hogar', false],
+      ].map(([id, nombre, cantidad, seccion, comprado]) => ({ id, nombre, cantidad, seccion, comprado })),
+    };
+  }
+  function cargar() {
+    try { return JSON.parse(localStorage.getItem(CLAVE)); } catch { return null; }
+  }
+  function guardar() {
+    try { localStorage.setItem(CLAVE, JSON.stringify(datos)); }
+    catch { /* el navegador no deja guardar (p. ej. modo privado): el panel sigue funcionando */ }
+  }
+  // Completa los apartados que falten (datos guardados con una versión anterior del panel).
+  function completar(d) {
+    const ej = d.ejemplo ? datosDeEjemplo() : {};
+    for (const [clave, vacio] of [['agenda', []], ['vence', []], ['dinero', []], ['suscripciones', []], ['habitos', []], ['compra', []]]) {
+      if (!d[clave] || typeof d[clave] !== 'object') d[clave] = ej[clave] || vacio;
+    }
+    delete d.salud; // el apartado de salud se quitó el 15/11/2026
+    return d;
+  }
+  const datos = completar(cargar() || datosDeEjemplo());
+
+  // Euros con formato español: 1.234,56 €
+  const fmtEuros = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', useGrouping: 'always' });
+  const euros = (n) => fmtEuros.format(n);
+  // Lee "1.234,56", "68,4" o "68.40" como número; devuelve null si no es válido.
+  function leerImporte(texto) {
+    let t = texto.trim().replace(/\s|€/g, '');
+    if (!t) return null;
+    if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+    const n = Number(t);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : NaN;
+  }
+  // Días que faltan desde hoy hasta una fecha AAAA-MM-DD (negativo si ya pasó).
+  function diasHasta(iso) {
+    const [a, m, d] = iso.split('-').map(Number);
+    const hoy0 = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+    return Math.round((new Date(a, m - 1, d) - hoy0) / 864e5);
+  }
+
+  // Pequeña ayuda para crear elementos sin riesgo de inyectar HTML.
+  function el(etiqueta, clase, texto) {
+    const n = document.createElement(etiqueta);
+    if (clase) n.className = clase;
+    if (texto != null) n.textContent = texto;
+    return n;
+  }
+  const icoBorrar = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+
+  // ---------- Agenda ----------
+  const fmtDia = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  function nombreDelDia(iso) {
+    if (iso === hoy) return 'Hoy';
+    if (iso === masDias(1)) return 'Mañana';
+    const [a, m, d] = iso.split('-').map(Number);
+    const t = fmtDia.format(new Date(a, m - 1, d));
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  function minutosHasta(hora) {
+    const [hh, mm] = hora.split(':').map(Number);
+    return hh * 60 + mm - (new Date().getHours() * 60 + new Date().getMinutes());
+  }
+  function textoFalta(min) {
+    if (min < 60) return `en ${min} min`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return m ? `en ${h} h ${m} min` : `en ${h} h`;
+  }
+
+  function pintarAgenda() {
+    const caja = document.getElementById('agenda-contenido');
+    caja.replaceChildren();
+    const limite = masDias(6);
+    const proximas = datos.agenda
+      .filter((c) => c.fecha >= hoy && c.fecha <= limite)
+      .sort((a, b) => (a.fecha + (a.hora || '')).localeCompare(b.fecha + (b.hora || '')));
+
+    if (!proximas.some((c) => c.fecha === hoy)) {
+      proximas.unshift({ vacioHoy: true, fecha: hoy });
+    }
+    let siguienteMarcada = false;
+    const dias = [...new Set(proximas.map((c) => c.fecha))];
+    for (const dia of dias) {
+      const bloque = el('div', 'agenda-dia');
+      bloque.append(el('h3', null, nombreDelDia(dia)));
+      const lista = el('ul', 'agenda-lista');
+      for (const c of proximas.filter((x) => x.fecha === dia)) {
+        if (c.vacioHoy) { lista.append(el('li', 'vacio', 'Hoy no tienes nada apuntado.')); continue; }
+        const li = el('li', 'evento');
+        const hora = el('span', 'evento-hora', c.hora || 'Todo');
+        if (!c.hora) hora.append(el('small', null, 'el día'));
+        const texto = el('span', 'evento-texto');
+        const titulo = el('span', 'evento-titulo', c.titulo);
+        if (dia === hoy && c.hora) {
+          const falta = minutosHasta(c.hora);
+          if (falta < 0) li.classList.add('evento--pasado');
+          else if (!siguienteMarcada) { titulo.append(el('span', 'chip', textoFalta(falta))); siguienteMarcada = true; }
+        }
+        texto.append(titulo);
+        if (c.lugar) texto.append(el('span', 'evento-lugar', c.lugar));
+        const borrar = el('button', 'borrar');
+        borrar.type = 'button';
+        borrar.innerHTML = icoBorrar;
+        borrar.setAttribute('aria-label', `Borrar «${c.titulo}»`);
+        borrar.addEventListener('click', () => {
+          if (!confirm(`¿Borrar «${c.titulo}» de la agenda?`)) return;
+          datos.agenda = datos.agenda.filter((x) => x.id !== c.id);
+          guardar(); pintarAgenda();
+        });
+        li.append(hora, el('span', 'evento-punto'), texto, borrar);
+        lista.append(li);
+      }
+      bloque.append(lista);
+      caja.append(bloque);
+    }
+  }
+
+  // ---------- Lo que vence ----------
+  const fmtMes = new Intl.DateTimeFormat('es-ES', { month: 'short' });
+  const icoHecho = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>';
+  function textoEstado(d) {
+    if (d < -1) return `Venció hace ${-d} días`;
+    if (d === -1) return 'Venció ayer';
+    if (d === 0) return 'Vence hoy';
+    if (d === 1) return 'Vence mañana';
+    return `Faltan ${d} días`;
+  }
+  const recienHechos = new Set();
+  function pintarVence() {
+    const caja = document.getElementById('vence-contenido');
+    caja.replaceChildren();
+    const pendientes = datos.vence.filter((v) => !v.hecho || recienHechos.has(v.id)).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const cerca = pendientes.filter((v) => diasHasta(v.fecha) <= 30);
+    const masAdelante = pendientes.length - cerca.length;
+
+    if (!cerca.length) {
+      caja.append(el('p', 'vacio', 'No tienes nada pendiente en los próximos 30 días.'));
+    } else {
+      const total = cerca.filter((v) => !v.hecho).reduce((s, v) => s + (v.importe || 0), 0);
+      const vencidos = cerca.filter((v) => !v.hecho && diasHasta(v.fecha) < 0).length;
+      const resumen = el('p', 'resumen');
+      resumen.append(el('strong', null, euros(total)), 'por pagar en 30 días');
+      if (vencidos) resumen.append(' · ', el('span', 'alerta', vencidos === 1 ? '1 vencido' : `${vencidos} vencidos`));
+      caja.append(resumen);
+
+      const lista = el('ul', 'agenda-lista');
+      for (const v of cerca) {
+        if (v.hecho) {
+          // Recién marcado: se puede deshacer hasta que cierres el panel
+          const li = el('li', 'vence vence--hecho');
+          const deshacer = el('button', 'boton-texto', 'Deshacer');
+          deshacer.type = 'button';
+          deshacer.addEventListener('click', () => { v.hecho = false; recienHechos.delete(v.id); guardar(); pintarVence(); });
+          li.append(el('span', 'vence-texto', `«${v.titulo}» hecho`), deshacer);
+          lista.append(li);
+          continue;
+        }
+        const d = diasHasta(v.fecha);
+        const li = el('li', 'vence' + (d <= 0 ? ' vence--urgente' : d <= 3 ? ' vence--pronto' : ''));
+        const [a, m, dia] = v.fecha.split('-').map(Number);
+        const cuadro = el('span', 'vence-fecha');
+        cuadro.append(el('b', null, String(dia)), el('span', null, fmtMes.format(new Date(a, m - 1, dia)).replace('.', '')));
+        const texto = el('span', 'vence-texto');
+        texto.append(el('span', 'vence-titulo', v.titulo), el('span', 'vence-estado', textoEstado(d)));
+        const boton = el('button', 'hecho');
+        boton.type = 'button';
+        boton.innerHTML = icoHecho;
+        boton.title = 'Marcar como hecho';
+        boton.setAttribute('aria-label', `Marcar «${v.titulo}» como hecho`);
+        boton.addEventListener('click', () => { v.hecho = true; recienHechos.add(v.id); guardar(); pintarVence(); });
+        li.append(cuadro, texto, el('span', 'vence-importe', v.importe != null ? euros(v.importe) : ''), boton);
+        lista.append(li);
+      }
+      caja.append(lista);
+    }
+    if (masAdelante) caja.append(el('p', 'mas', masAdelante === 1 ? 'Y 1 más para dentro de un mes o más.' : `Y ${masAdelante} más para dentro de un mes o más.`));
+  }
+
+  // ---------- Dinero del mes ----------
+  const CATEGORIAS_GASTO = ['Casa', 'Comida', 'Transporte', 'Ocio', 'Salud', 'Compras', 'Otros'];
+  const CATEGORIAS_INGRESO = ['Ingresos', 'Otros'];
+  const mesActual = hoy.slice(0, 7);
+  const nombreMes = new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(ahora);
+  document.getElementById('dinero-titulo').textContent = `Dinero de ${nombreMes}`;
+  const fmtDiaCorto = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
+
+  function pintarDinero() {
+    const caja = document.getElementById('dinero-contenido');
+    caja.replaceChildren();
+    const delMes = datos.dinero.filter((m) => m.fecha.startsWith(mesActual));
+    if (!delMes.length) { caja.append(el('p', 'vacio', `Aún no has apuntado nada en ${nombreMes}.`)); return; }
+
+    const suma = (tipo) => delMes.filter((m) => m.tipo === tipo).reduce((s, m) => s + m.importe, 0);
+    const ingresos = suma('ingreso'), gastos = suma('gasto'), queda = ingresos - gastos;
+    const cifras = el('dl', 'cifras');
+    for (const [nombre, valor, clase] of [['Ingresos', euros(ingresos), 'positivo'], ['Gastos', euros(gastos), ''], ['Te queda', euros(queda), queda < 0 ? 'negativo' : '']]) {
+      const d = el('div'); d.append(el('dt', null, nombre), el('dd', clase, valor)); cifras.append(d);
+    }
+    caja.append(cifras);
+
+    // Gráfico: gasto por categoría, de mayor a menor
+    const porCategoria = {};
+    for (const m of delMes) if (m.tipo === 'gasto') porCategoria[m.categoria] = (porCategoria[m.categoria] || 0) + m.importe;
+    const filas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]);
+    if (filas.length) {
+      caja.append(el('h3', 'subtitulo', 'En qué se va'));
+      const barras = el('ul', 'barras');
+      const max = filas[0][1];
+      for (const [cat, total] of filas) {
+        const li = el('li');
+        const fila = el('div', 'barra-fila');
+        fila.append(el('span', null, cat), el('span', null, euros(total)));
+        const barra = el('div', 'barra');
+        const relleno = el('i');
+        relleno.style.width = Math.max(2, (total / max) * 100) + '%';
+        barra.append(relleno);
+        li.append(fila, barra);
+        barras.append(li);
+      }
+      caja.append(barras);
+    }
+
+    // Últimos movimientos
+    caja.append(el('h3', 'subtitulo', 'Últimos movimientos'));
+    const lista = el('ul', 'agenda-lista');
+    const recientes = [...delMes].reverse().sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 4); // mismo día: el último apuntado, primero
+    for (const m of recientes) {
+      const li = el('li', 'mov');
+      const [a, mes, dia] = m.fecha.split('-').map(Number);
+      const texto = el('span', 'mov-texto');
+      texto.append(el('b', null, m.concepto), el('span', null, `${m.categoria} · ${fmtDiaCorto.format(new Date(a, mes - 1, dia)).replace('.', '')}`));
+      const importe = el('span', 'mov-importe' + (m.tipo === 'ingreso' ? ' ingreso' : ''), (m.tipo === 'ingreso' ? '+' : '−') + euros(m.importe));
+      const borrar = el('button', 'borrar');
+      borrar.type = 'button';
+      borrar.innerHTML = icoBorrar;
+      borrar.setAttribute('aria-label', `Borrar «${m.concepto}»`);
+      borrar.addEventListener('click', () => {
+        if (!confirm(`¿Borrar «${m.concepto}» (${euros(m.importe)})?`)) return;
+        datos.dinero = datos.dinero.filter((x) => x.id !== m.id);
+        guardar(); pintarDinero();
+      });
+      li.append(texto, importe, borrar);
+      lista.append(li);
+    }
+    caja.append(lista);
+  }
+
+  // El desplegable de categorías cambia según sea gasto o ingreso
+  function rellenarCategorias(form) {
+    const lista = form.tipo.value === 'ingreso' ? CATEGORIAS_INGRESO : CATEGORIAS_GASTO;
+    form.categoria.replaceChildren(...lista.map((c) => new Option(c, c)));
+  }
+  document.getElementById('dinero-form').tipo.addEventListener('change', (e) => rellenarCategorias(e.target.form));
+
+  // ---------- Suscripciones ----------
+  // Próximo cobro a partir de hoy: avanza de mes en mes (o de año en año) desde la fecha guardada.
+  function proximoCobro(s) {
+    const [a, m, d] = s.fecha.split('-').map(Number);
+    for (let i = 0; i < 1200; i++) {
+      const paso = s.periodo === 'anual' ? 12 * i : i;
+      const ultimo = new Date(a, m - 1 + paso + 1, 0).getDate(); // p. ej. día 31 en un mes de 30
+      const f = diaISO(new Date(a, m - 1 + paso, Math.min(d, ultimo)));
+      if (f >= hoy) return f;
+    }
+    return hoy;
+  }
+  const alMes = (s) => (s.periodo === 'anual' ? s.importe / 12 : s.importe);
+
+  function pintarSuscripciones() {
+    const caja = document.getElementById('sus-contenido');
+    caja.replaceChildren();
+    const lista = datos.suscripciones.map((s) => ({ ...s, proximo: proximoCobro(s) }));
+    if (!lista.length) { caja.append(el('p', 'vacio', 'No tienes suscripciones apuntadas.')); return; }
+
+    const mensual = lista.reduce((t, s) => t + alMes(s), 0);
+    const cifras = el('dl', 'cifras');
+    cifras.style.gridTemplateColumns = '1fr 1fr';
+    for (const [nombre, valor] of [['Al mes', euros(mensual)], ['Al año', euros(mensual * 12)]]) {
+      const d = el('div'); d.append(el('dt', null, nombre), el('dd', null, valor)); cifras.append(d);
+    }
+    caja.append(cifras);
+
+    // Gráfico: cuánto pesa cada suscripción en el total mensual
+    const porPeso = [...lista].sort((a, b) => alMes(b) - alMes(a));
+    const reparto = el('div', 'reparto');
+    reparto.setAttribute('role', 'img');
+    reparto.setAttribute('aria-label', 'Reparto del gasto mensual: ' + porPeso.map((s) => `${s.nombre} ${Math.round((alMes(s) / mensual) * 100)} %`).join(', '));
+    porPeso.forEach((s, i) => {
+      const trozo = el('i');
+      trozo.style.flex = String(alMes(s));
+      trozo.style.opacity = String(1 - (i / porPeso.length) * 0.7);
+      trozo.title = `${s.nombre}: ${euros(alMes(s))} al mes`;
+      reparto.append(trozo);
+    });
+    caja.append(reparto);
+
+    const ul = el('ul', 'agenda-lista');
+    const opacidad = new Map(porPeso.map((s, i) => [s.id, 1 - (i / porPeso.length) * 0.7]));
+    for (const s of lista.sort((a, b) => a.proximo.localeCompare(b.proximo))) {
+      const faltan = diasHasta(s.proximo);
+      const li = el('li', 'sus' + (faltan <= 3 ? ' sus--pronto' : ''));
+      const [a, m, d] = s.proximo.split('-').map(Number);
+      const cuando = faltan === 0 ? 'Se cobra hoy' : faltan === 1 ? 'Se cobra mañana' : `Se cobra el ${fmtDiaCorto.format(new Date(a, m - 1, d)).replace('.', '')} · en ${faltan} días`;
+      const texto = el('span', 'sus-texto');
+      const nombre = el('b');
+      const punto = el('i');
+      punto.style.opacity = String(opacidad.get(s.id));
+      nombre.append(punto, s.nombre);
+      texto.append(nombre, el('span', null, cuando));
+      const importe = el('span', 'sus-importe', euros(s.importe));
+      importe.append(el('small', null, s.periodo === 'anual' ? 'al año' : 'al mes'));
+      const borrar = el('button', 'borrar');
+      borrar.type = 'button';
+      borrar.innerHTML = icoBorrar;
+      borrar.setAttribute('aria-label', `Borrar «${s.nombre}»`);
+      borrar.addEventListener('click', () => {
+        if (!confirm(`¿Borrar la suscripción «${s.nombre}»?`)) return;
+        datos.suscripciones = datos.suscripciones.filter((x) => x.id !== s.id);
+        guardar(); pintarSuscripciones();
+      });
+      li.append(texto, importe, borrar);
+      ul.append(li);
+    }
+    caja.append(ul);
+  }
+
+  // ---------- Hábitos ----------
+  const LETRA_DIA = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+  const fmtDiaLargo = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+  const icoCheck = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>';
+  // Días seguidos cumplidos hasta hoy (si hoy aún no está marcado, cuenta desde ayer).
+  function racha(h) {
+    const hechos = new Set(h.hechos);
+    let n = 0, i = hechos.has(hoy) ? 0 : -1;
+    while (hechos.has(masDias(i - n))) n++;
+    return n;
+  }
+  function pintarHabitos() {
+    const caja = document.getElementById('hab-contenido');
+    caja.replaceChildren();
+    if (!datos.habitos.length) { caja.append(el('p', 'vacio', 'Añade un hábito para empezar a marcarlo cada día.')); return; }
+
+    const hoyHechos = datos.habitos.filter((h) => h.hechos.includes(hoy)).length;
+    const resumen = el('p', 'resumen');
+    resumen.append(el('strong', null, `${hoyHechos} de ${datos.habitos.length}`), 'hechos hoy');
+    caja.append(resumen);
+
+    for (const h of datos.habitos) {
+      const fila = el('div', 'habito');
+      const cabeza = el('div', 'habito-cabeza');
+      const r = racha(h);
+      const borrar = el('button', 'borrar');
+      borrar.type = 'button';
+      borrar.innerHTML = icoBorrar;
+      borrar.setAttribute('aria-label', `Borrar el hábito «${h.nombre}»`);
+      borrar.addEventListener('click', () => {
+        if (!confirm(`¿Borrar el hábito «${h.nombre}» y todo su historial?`)) return;
+        datos.habitos = datos.habitos.filter((x) => x.id !== h.id);
+        guardar(); pintarHabitos();
+      });
+      cabeza.append(el('b', null, h.nombre), el('span', 'racha' + (r >= 3 ? ' racha--viva' : ''), r === 1 ? '1 día seguido' : `${r} días seguidos`), borrar);
+
+      // Últimos 7 días: cada cuadrado se toca para marcar o desmarcar ese día
+      const semana = el('div', 'semana');
+      for (let i = -6; i <= 0; i++) {
+        const iso = masDias(i);
+        const [a, m, d] = iso.split('-').map(Number);
+        const fecha = new Date(a, m - 1, d);
+        const hecho = h.hechos.includes(iso);
+        const b = el('button', 'dia-boton' + (i === 0 ? ' dia-boton--hoy' : ''));
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(hecho));
+        b.setAttribute('aria-label', `${h.nombre}, ${i === 0 ? 'hoy' : fmtDiaLargo.format(fecha)}`);
+        const cuadro = el('span');
+        cuadro.innerHTML = icoCheck;
+        b.append(cuadro, i === 0 ? 'Hoy' : LETRA_DIA[fecha.getDay()]);
+        b.addEventListener('click', () => {
+          h.hechos = hecho ? h.hechos.filter((x) => x !== iso) : [...h.hechos, iso];
+          guardar(); pintarHabitos();
+        });
+        semana.append(b);
+      }
+      fila.append(cabeza, semana);
+      caja.append(fila);
+    }
+  }
+
+  // ---------- Formularios: abrir, cancelar, comprobar y guardar ----------
+  // alGuardar(form) devuelve [mensaje, campo] si algo falta; si todo va bien, añade el dato y no devuelve nada.
+  function montarFormulario(id, alAbrir, alGuardar) {
+    const form = document.getElementById(id + '-form');
+    const abrir = document.getElementById(id + '-abrir');
+    const error = document.getElementById(id + '-error');
+    const mostrar = (si) => {
+      form.hidden = !si;
+      abrir.setAttribute('aria-expanded', String(si));
+      error.hidden = true;
+      if (si) { form.reset(); alAbrir(form); form.elements[0].focus(); }
+    };
+    abrir.addEventListener('click', () => mostrar(form.hidden));
+    form.querySelector('[data-cancelar]').addEventListener('click', () => mostrar(false));
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fallo = alGuardar(form);
+      if (fallo) { error.textContent = fallo[0]; error.hidden = false; fallo[1].focus(); return; }
+      guardar(); mostrar(false); pintarTodo();
+    });
+  }
+
+  montarFormulario('agenda', (f) => { f.fecha.value = hoy; }, (f) => {
+    const titulo = f.titulo.value.trim();
+    if (!titulo) return ['Escribe qué es la cita.', f.titulo];
+    if (!f.fecha.value) return ['Elige el día de la cita.', f.fecha];
+    datos.agenda.push({ id: String(Date.now()), titulo, fecha: f.fecha.value, hora: f.hora.value, lugar: f.lugar.value.trim() });
+  });
+
+  montarFormulario('vence', () => {}, (f) => {
+    const titulo = f.titulo.value.trim();
+    if (!titulo) return ['Escribe qué vence.', f.titulo];
+    if (!f.fecha.value) return ['Elige la fecha límite.', f.fecha];
+    const importe = leerImporte(f.importe.value);
+    if (Number.isNaN(importe)) return ['El importe no es válido. Escríbelo así: 68,40', f.importe];
+    datos.vence.push({ id: String(Date.now()), titulo, fecha: f.fecha.value, importe });
+  });
+
+  montarFormulario('dinero', (f) => { f.fecha.value = hoy; rellenarCategorias(f); }, (f) => {
+    const concepto = f.concepto.value.trim();
+    if (!concepto) return ['Escribe el concepto.', f.concepto];
+    const importe = leerImporte(f.importe.value);
+    if (importe == null || Number.isNaN(importe) || importe === 0) return ['Escribe el importe, por ejemplo: 25,90', f.importe];
+    if (!f.fecha.value) return ['Elige el día.', f.fecha];
+    datos.dinero.push({ id: String(Date.now()), tipo: f.tipo.value, concepto, importe, categoria: f.categoria.value, fecha: f.fecha.value });
+  });
+
+  montarFormulario('sus', (f) => { f.fecha.value = hoy; }, (f) => {
+    const nombre = f.nombre.value.trim();
+    if (!nombre) return ['Escribe el nombre.', f.nombre];
+    const importe = leerImporte(f.importe.value);
+    if (importe == null || Number.isNaN(importe) || importe === 0) return ['Escribe el importe, por ejemplo: 9,99', f.importe];
+    if (!f.fecha.value) return ['Elige el día del próximo cobro.', f.fecha];
+    datos.suscripciones.push({ id: String(Date.now()), nombre, importe, periodo: f.periodo.value, fecha: f.fecha.value });
+  });
+
+  montarFormulario('hab', () => {}, (f) => {
+    const nombre = f.nombre.value.trim();
+    if (!nombre) return ['Escribe el hábito.', f.nombre];
+    datos.habitos.push({ id: String(Date.now()), nombre, hechos: [] });
+  });
+
+  // ---------- Lista de la compra ----------
+  const SECCIONES = ['Fruta y verdura', 'Carne y pescado', 'Lácteos y huevos', 'Panadería', 'Despensa', 'Congelados', 'Bebidas', 'Limpieza y hogar', 'Higiene', 'Otros'];
+  const formCompra = document.getElementById('compra-form');
+  formCompra.seccion.replaceChildren(...SECCIONES.map((s) => new Option(s, s)));
+  formCompra.seccion.value = 'Otros';
+
+  function filaArticulo(a) {
+    const li = el('li', 'articulo' + (a.comprado ? ' articulo--hecho' : ''));
+    const marca = el('button', 'hecho');
+    marca.type = 'button';
+    marca.innerHTML = icoHecho;
+    marca.setAttribute('aria-pressed', String(a.comprado));
+    marca.setAttribute('aria-label', a.comprado ? `Volver a poner «${a.nombre}» en la lista` : `Marcar «${a.nombre}» como comprado`);
+    marca.addEventListener('click', () => { a.comprado = !a.comprado; guardar(); pintarCompra(); });
+    const texto = el('span', 'articulo-texto', a.nombre);
+    if (a.cantidad) texto.append(el('small', null, a.cantidad));
+    li.append(marca, texto);
+    return li;
+  }
+
+  function pintarCompra() {
+    const caja = document.getElementById('compra-contenido');
+    caja.replaceChildren();
+    const pendientes = datos.compra.filter((a) => !a.comprado);
+    const comprados = datos.compra.filter((a) => a.comprado);
+    if (!datos.compra.length) { caja.append(el('p', 'vacio', 'La lista está vacía. Añade lo que haga falta.')); return; }
+
+    const resumen = el('p', 'resumen');
+    resumen.append(el('strong', null, String(pendientes.length)), pendientes.length === 1 ? 'artículo por comprar' : 'artículos por comprar');
+    caja.append(resumen);
+
+    // Agrupado por pasillos, en el orden del súper; lo comprado va al final
+    const pasillos = el('div', 'pasillos');
+    for (const s of SECCIONES) {
+      const deAqui = pendientes.filter((a) => (SECCIONES.includes(a.seccion) ? a.seccion : 'Otros') === s);
+      if (!deAqui.length) continue;
+      const bloque = el('div', 'pasillo');
+      const ul = el('ul', 'agenda-lista');
+      ul.append(...deAqui.map(filaArticulo));
+      bloque.append(el('h3', null, s), ul);
+      pasillos.append(bloque);
+    }
+    if (comprados.length) {
+      const bloque = el('div', 'pasillo');
+      const cabecera = el('div', 'comprados-cabecera');
+      const vaciar = el('button', 'boton-texto', 'Quitar comprados');
+      vaciar.type = 'button';
+      vaciar.addEventListener('click', () => {
+        if (!confirm(`¿Quitar de la lista los ${comprados.length} artículos ya comprados?`)) return;
+        datos.compra = datos.compra.filter((a) => !a.comprado);
+        guardar(); pintarCompra();
+      });
+      cabecera.append(el('h3', null, 'Comprado'), vaciar);
+      const ul = el('ul', 'agenda-lista');
+      ul.append(...comprados.map(filaArticulo));
+      bloque.append(cabecera, ul);
+      pasillos.append(bloque);
+    }
+    caja.append(pasillos);
+  }
+
+  formCompra.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const error = document.getElementById('compra-error');
+    const nombre = formCompra.nombre.value.trim();
+    if (!nombre) { error.textContent = 'Escribe qué hay que comprar.'; error.hidden = false; formCompra.nombre.focus(); return; }
+    error.hidden = true;
+    // Si ya está en la lista (aunque esté comprado), se reactiva en vez de duplicarlo
+    const ya = datos.compra.find((a) => a.nombre.toLowerCase() === nombre.toLowerCase());
+    if (ya) { ya.comprado = false; if (formCompra.cantidad.value.trim()) ya.cantidad = formCompra.cantidad.value.trim(); }
+    else datos.compra.push({ id: String(Date.now()), nombre, cantidad: formCompra.cantidad.value.trim(), seccion: formCompra.seccion.value, comprado: false });
+    guardar(); pintarCompra();
+    formCompra.nombre.value = ''; formCompra.cantidad.value = '';
+    formCompra.nombre.focus(); // listo para el siguiente artículo; la sección se queda
+  });
+
+  function pintarTodo() { pintarAgenda(); pintarVence(); pintarDinero(); pintarSuscripciones(); pintarHabitos(); pintarCompra(); }
+  pintarTodo();
+
+  // ---------- Copia de seguridad y datos de ejemplo ----------
+  const aviso = document.getElementById('pie-aviso');
+  const avisar = (texto, mal = false) => { aviso.textContent = texto; aviso.classList.toggle('mal', mal); };
+  const fechaCorta = (d) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  function pintarPie() {
+    document.getElementById('ejemplo-borrar').hidden = !datos.ejemplo;
+    document.getElementById('pie-texto').textContent =
+      'Tus datos se guardan solo en este navegador y no se envían a ningún sitio. ' +
+      (datos.ultimaCopia ? `Última copia: ${fechaCorta(datos.ultimaCopia)}.` : 'Aún no has guardado ninguna copia.');
+  }
+
+  // Descarga un archivo con todos tus datos (se crea en tu ordenador, no sale a internet).
+  document.getElementById('copia-guardar').addEventListener('click', () => {
+    datos.ultimaCopia = new Date().toISOString();
+    guardar();
+    const archivo = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(archivo);
+    enlace.download = `panel-de-vida-${hoy}.json`;
+    enlace.click();
+    setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
+    pintarPie();
+    avisar(`Copia guardada en tu carpeta de descargas: ${enlace.download}`);
+  });
+
+  // Carga una copia: sustituye los datos de este navegador por los del archivo.
+  const entrada = document.getElementById('copia-archivo');
+  document.getElementById('copia-cargar').addEventListener('click', () => entrada.click());
+  entrada.addEventListener('change', async () => {
+    const archivo = entrada.files[0];
+    entrada.value = '';
+    if (!archivo) return;
+    let nuevo;
+    try { nuevo = JSON.parse(await archivo.text()); } catch { nuevo = null; }
+    const valido = nuevo && typeof nuevo === 'object' && !Array.isArray(nuevo) &&
+      ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra'].some((k) => k in nuevo);
+    if (!valido) { avisar('Ese archivo no es una copia del panel. Elige un archivo «panel-de-vida-….json».', true); return; }
+    if (!confirm('Cargar esta copia sustituye todos los datos que hay ahora en este navegador. ¿Seguir?')) return;
+    for (const k of Object.keys(datos)) delete datos[k];
+    Object.assign(datos, completar(nuevo));
+    guardar(); pintarTodo(); pintarPie();
+    avisar('Copia cargada.');
+  });
+
+  // Quita solo lo que venía de ejemplo; lo que hayas añadido tú se queda.
+  const ID_EJEMPLO = /^(e|v|d|s|h|c)\d+$/;
+  document.getElementById('ejemplo-borrar').addEventListener('click', () => {
+    if (!confirm('¿Borrar todos los datos de ejemplo? Lo que hayas añadido tú se queda.')) return;
+    for (const k of ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra'])datos[k] = datos[k].filter((x) => !ID_EJEMPLO.test(x.id));
+    datos.ejemplo = false;
+    guardar(); pintarTodo(); pintarPie();
+    avisar('Datos de ejemplo borrados. El panel es todo tuyo.');
+  });
+
+  pintarPie();
+
+  // App instalable y sin conexión: solo funciona cuando el panel está publicado en internet (no al abrirlo con doble clic).
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* sin modo sin conexión; el panel sigue funcionando */ });
+  }
+
+  // Autocomprobación de importes y fechas (sale en la consola solo si algo falla).
+  console.assert(leerImporte('1.234,56') === 1234.56 && leerImporte('68.40') === 68.4 && leerImporte('') === null && Number.isNaN(leerImporte('abc')), 'leerImporte');
+  console.assert(euros(1234.56).replace(/\s/g, ' ') === '1.234,56 €', 'euros: ' + euros(1234.56));
+  console.assert(diasHasta(masDias(3)) === 3 && diasHasta(hoy) === 0, 'diasHasta');
+  console.assert(racha({ hechos: [masDias(-1), masDias(-2), masDias(-4)] }) === 2 && racha({ hechos: [hoy, masDias(-1)] }) === 2 && racha({ hechos: [] }) === 0, 'racha');
+  console.assert(proximoCobro({ fecha: masDias(-30), periodo: 'mensual' }) >= hoy && proximoCobro({ fecha: masDias(5), periodo: 'anual' }) === masDias(5), 'proximoCobro');
+</script>
+</body>
+</html>

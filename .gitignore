@@ -1,0 +1,7 @@
+# Solo se publica la app. Las notas del proyecto, el diseño y las capturas se quedan en este ordenador.
+CLAUDE.md
+PRODUCT.md
+DESIGN.md
+.impeccable/
+.claude/
+*.json
