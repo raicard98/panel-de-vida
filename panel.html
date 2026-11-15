@@ -341,7 +341,7 @@
   .sus-texto { min-width: 0; }
   .sus-texto b { display: flex; align-items: center; gap: 8px; font-weight: 600; overflow-wrap: anywhere; }
   .sus-texto b i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--suscripciones); }
-  .sus-texto span { font-size: 13px; color: var(--texto-2); }
+  .sus-texto span { display: block; font-size: 13px; color: var(--texto-2); }
   .sus--pronto .sus-texto span { color: var(--suscripciones); font-weight: 600; }
   .sus-importe { font-weight: 600; white-space: nowrap; text-align: right; }
   .sus-importe small { display: block; font-size: 12px; font-weight: 500; color: var(--texto-2); }
@@ -507,6 +507,7 @@
           <label>Fecha límite<input name="fecha" type="date" required></label>
           <label>Importe en € (opcional)<input name="importe" inputmode="decimal" placeholder="0,00"></label>
         </div>
+        <label>Se repite<select name="repite"><option value="">No, solo una vez</option><option value="anual">Cada año</option><option value="semestral">Cada 6 meses</option><option value="mensual">Cada mes</option></select></label>
         <p class="error" id="vence-error" role="alert" hidden></p>
         <div class="acciones">
           <button type="button" class="boton" data-cancelar>Cancelar</button>
@@ -552,7 +553,7 @@
         <label>Nombre<input name="nombre" maxlength="40" placeholder="Ej.: Netflix" required></label>
         <div class="fila">
           <label>Importe en €<input name="importe" inputmode="decimal" placeholder="0,00" required></label>
-          <label>Se paga<select name="periodo"><option value="mensual">Cada mes</option><option value="anual">Cada año</option></select></label>
+          <label>Se paga<select name="periodo"><option value="mensual">Cada mes</option><option value="semestral">Cada 6 meses</option><option value="anual">Cada año</option></select></label>
         </div>
         <label>Próximo cobro<input name="fecha" type="date" required></label>
         <p class="error" id="sus-error" role="alert" hidden></p>
@@ -764,10 +765,15 @@
     return `Faltan ${d} días`;
   }
   const recienHechos = new Set();
+  const recienPagados = new Map(); // pagos que se repiten, marcados en esta sesión: id → fecha anterior (para deshacer)
   function pintarVence() {
     const caja = document.getElementById('vence-contenido');
     caja.replaceChildren();
-    const pendientes = datos.vence.filter((v) => !v.hecho || recienHechos.has(v.id)).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    // Las suscripciones que no son mensuales también avisan de su próximo pago (no se marcan: avanzan solas)
+    const deSuscripciones = datos.suscripciones.filter((s) => s.periodo && s.periodo !== 'mensual')
+      .map((s) => ({ id: 'sus-' + s.id, titulo: s.nombre, fecha: proximoCobro(s), importe: s.importe, suscripcion: true }));
+    const pendientes = [...datos.vence.filter((v) => !v.hecho || recienHechos.has(v.id)), ...deSuscripciones]
+      .filter((v) => !recienPagados.has(v.id)).sort((a, b) => a.fecha.localeCompare(b.fecha));
     const cerca = pendientes.filter((v) => diasHasta(v.fecha) <= 30);
     const masAdelante = pendientes.length - cerca.length;
 
@@ -782,6 +788,16 @@
       caja.append(resumen);
 
       const lista = el('ul', 'agenda-lista');
+      for (const v of datos.vence.filter((x) => recienPagados.has(x.id))) {
+        // Pago que se repite, recién marcado: ya ha saltado a la próxima fecha; se puede deshacer
+        const li = el('li', 'vence vence--hecho');
+        const deshacer = el('button', 'boton-texto', 'Deshacer');
+        deshacer.type = 'button';
+        deshacer.addEventListener('click', () => { v.fecha = recienPagados.get(v.id); recienPagados.delete(v.id); guardar(); pintarVence(); });
+        const [pa, pm, pd] = v.fecha.split('-');
+        li.append(el('span', 'vence-texto', `«${v.titulo}» pagado · el próximo, ${pd}/${pm}/${pa}`), deshacer);
+        lista.append(li);
+      }
       for (const v of cerca) {
         if (v.hecho) {
           // Recién marcado: se puede deshacer hasta que cierres el panel
@@ -799,14 +815,18 @@
         const cuadro = el('span', 'vence-fecha');
         cuadro.append(el('b', null, String(dia)), el('span', null, fmtMes.format(new Date(a, m - 1, dia)).replace('.', '')));
         const texto = el('span', 'vence-texto');
-        texto.append(el('span', 'vence-titulo', v.titulo), el('span', 'vence-estado', textoEstado(d)));
+        texto.append(el('span', 'vence-titulo', v.titulo), el('span', 'vence-estado', textoEstado(d) + (v.suscripcion ? ' · suscripción' : v.repite ? ` · ${TEXTO_PERIODO[v.repite]}` : '')));
         const boton = el('button', 'hecho');
         boton.type = 'button';
         boton.innerHTML = icoHecho;
         boton.title = 'Marcar como hecho';
         boton.setAttribute('aria-label', `Marcar «${v.titulo}» como hecho`);
-        boton.addEventListener('click', () => { v.hecho = true; recienHechos.add(v.id); guardar(); pintarVence(); });
-        li.append(cuadro, texto, el('span', 'vence-importe', v.importe != null ? euros(v.importe) : ''), boton);
+        boton.addEventListener('click', () => {
+          if (v.repite) { recienPagados.set(v.id, v.fecha); v.fecha = sumarMeses(v.fecha, MESES_PERIODO[v.repite]); } // salta a la próxima vez
+          else { v.hecho = true; recienHechos.add(v.id); }
+          guardar(); pintarVence();
+        });
+        li.append(cuadro, texto, el('span', 'vence-importe', v.importe != null ? euros(v.importe) : ''), v.suscripcion ? el('span') : boton);
         lista.append(li);
       }
       caja.append(lista);
@@ -1017,17 +1037,21 @@
 
   // ---------- Suscripciones ----------
   // Próximo cobro a partir de hoy: avanza de mes en mes (o de año en año) desde la fecha guardada.
+  const MESES_PERIODO = { mensual: 1, semestral: 6, anual: 12 };
+  const TEXTO_PERIODO = { mensual: 'cada mes', semestral: 'cada 6 meses', anual: 'cada año' };
+  // La misma fecha n meses después (el día 31 pasa al último día si el mes es más corto)
+  function sumarMeses(fecha, n) {
+    const [a, m, d] = fecha.split('-').map(Number);
+    return diaISO(new Date(a, m - 1 + n, Math.min(d, new Date(a, m + n, 0).getDate())));
+  }
   function proximoCobro(s) {
-    const [a, m, d] = s.fecha.split('-').map(Number);
     for (let i = 0; i < 1200; i++) {
-      const paso = s.periodo === 'anual' ? 12 * i : i;
-      const ultimo = new Date(a, m - 1 + paso + 1, 0).getDate(); // p. ej. día 31 en un mes de 30
-      const f = diaISO(new Date(a, m - 1 + paso, Math.min(d, ultimo)));
+      const f = sumarMeses(s.fecha, i * (MESES_PERIODO[s.periodo] || 1));
       if (f >= hoy) return f;
     }
     return hoy;
   }
-  const alMes = (s) => (s.periodo === 'anual' ? s.importe / 12 : s.importe);
+  const alMes = (s) => s.importe / (MESES_PERIODO[s.periodo] || 1); // lo anual o semestral, repartido por meses
 
   function pintarSuscripciones() {
     const caja = document.getElementById('sus-contenido');
@@ -1070,8 +1094,9 @@
       punto.style.opacity = String(opacidad.get(s.id));
       nombre.append(punto, s.nombre);
       texto.append(nombre, el('span', null, cuando));
-      const importe = el('span', 'sus-importe', euros(s.importe));
-      importe.append(el('small', null, s.periodo === 'anual' ? 'al año' : 'al mes'));
+      const importe = el('span', 'sus-importe', euros(alMes(s)));
+      importe.append(el('small', null, 'al mes'));
+      if (s.periodo && s.periodo !== 'mensual') texto.append(el('span', null, `Pagas ${euros(s.importe)} ${TEXTO_PERIODO[s.periodo]}`));
       const borrar = el('button', 'borrar');
       borrar.type = 'button';
       borrar.innerHTML = icoBorrar;
@@ -1079,7 +1104,7 @@
       borrar.addEventListener('click', () => {
         if (!confirm(`¿Borrar la suscripción «${s.nombre}»?`)) return;
         datos.suscripciones = datos.suscripciones.filter((x) => x.id !== s.id);
-        guardar(); pintarSuscripciones();
+        guardar(); pintarSuscripciones(); pintarVence();
       });
       li.append(texto, importe, borrar);
       ul.append(li);
@@ -1209,7 +1234,7 @@
     if (!f.fecha.value) return ['Elige la fecha límite.', f.fecha];
     const importe = leerImporte(f.importe.value);
     if (Number.isNaN(importe)) return ['El importe no es válido. Escríbelo así: 68,40', f.importe];
-    datos.vence.push({ id: String(Date.now()), titulo, fecha: f.fecha.value, importe });
+    datos.vence.push({ id: String(Date.now()), titulo, fecha: f.fecha.value, importe, ...(f.repite.value && { repite: f.repite.value }) });
   });
 
   montarFormulario('dinero', (f) => { f.fecha.value = hoy; rellenarCategorias(f); }, (f) => {
@@ -2327,6 +2352,8 @@
       && m[3].id !== m[4].id && leerNorma43(f)[4].id === m[4].id && palabraClave('WWW.AMAZON* X1') === 'amazon' && titulo('WWW.AMAZON* UC8OG6DA5') === 'Amazon' && titulo('ADT       019Z7G') === 'Adt'
       && titulo('PRESTAMO  2103-7969-0500000780') === 'Prestamo' && titulo('INGRESO COMUNIDAD 8-3') === 'Ingreso Comunidad 8-3', 'leerNorma43');
   }
+  console.assert(sumarMeses('2026-01-31', 1) === '2026-02-28' && sumarMeses('2026-09-19', 12) === '2027-09-19' && sumarMeses('2026-08-31', 6) === '2027-02-28'
+    && proximoCobro({ fecha: '2020-03-20', periodo: 'semestral' }) >= hoy && alMes({ importe: 16, periodo: 'semestral' }).toFixed(2) === '2.67', 'sumarMeses');
   console.assert(racha({ hechos: [masDias(-1), masDias(-2), masDias(-4)] }) === 2 && racha({ hechos: [hoy, masDias(-1)] }) === 2 && racha({ hechos: [] }) === 0, 'racha');
   console.assert(proximoCobro({ fecha: masDias(-30), periodo: 'mensual' }) >= hoy && proximoCobro({ fecha: masDias(5), periodo: 'anual' }) === masDias(5), 'proximoCobro');
 </script>

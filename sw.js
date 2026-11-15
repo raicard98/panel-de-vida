@@ -1,6 +1,6 @@
 // Trabajador del Panel de vida: guarda una copia de la app para que abra sin conexión.
 // Primero intenta la versión nueva de internet; si no hay conexión, usa la copia guardada.
-const CACHE = 'panel-v17';
+const CACHE = 'panel-v18';
 const ARCHIVOS = ['./panel.html', './manifest.webmanifest', './icons/icono-192.png', './icons/icono-512.png', './icons/icono-maskable-512.png', './icons/icono-apple-180.png'];
 
 self.addEventListener('install', (e) => {
