@@ -1550,8 +1550,36 @@
     form.querySelector('#agenda-cal').hidden = !lista.length;
     form.calendario.replaceChildren(...lista.map((c) => { const op = el('option', null, c.nombre); op.value = c.id; return op; }));
     const cfg = leerJSON(CLAVE_CALENDARIO);
-    const compartido = lista.find((c) => c.nombre !== 'Tu calendario' && cfg.elegidos?.includes(c.id));
-    form.calendario.value = lista.some((c) => c.id === cfg?.ultimo) ? cfg.ultimo : (compartido || lista[0])?.id || '';
+    form.calendario.value = lista.some((c) => c.id === cfg?.ultimo) ? cfg.ultimo : calendarioCompartido()?.id || '';
+  }
+  // El primer calendario compartido (no el tuyo) que tengas encendido; si no hay, el primero editable
+  function calendarioCompartido() {
+    const lista = calendariosEscribibles(), cfg = leerJSON(CLAVE_CALENDARIO);
+    return lista.find((c) => c.nombre !== 'Tu calendario' && cfg?.elegidos?.includes(c.id)) || lista[0];
+  }
+
+  // --- Pasar a Google Calendar las citas apuntadas antes solo en el panel (las de ejemplo no) ---
+  const citasSoloPanel = () => datos.agenda.filter((c) => !ID_EJEMPLO.test(c.id));
+  async function pasarCitasViejas() {
+    const destino = calendarioCompartido();
+    const citas = citasSoloPanel();
+    if (!destino || !citas.length) return;
+    if (!confirm(`¿Pasar ${citas.length === 1 ? 'la cita' : `las ${citas.length} citas`} del panel a «${destino.nombre}» de Google Calendar? Después ya no estarán repetidas en el panel.`)) return;
+    if (!permisoCalendar()) await pedirToken();
+    let pasadas = 0, fallo = '';
+    try {
+      for (const c of citas) {
+        await llamarCalendar(`calendars/${encodeURIComponent(destino.id)}/events`, { method: 'POST', body: JSON.stringify(cuerpoCita(c)) });
+        datos.agenda = datos.agenda.filter((x) => x.id !== c.id); // se quita en cuanto está en Google: si algo falla, no se repite ni se pierde
+        guardar();
+        pasadas++;
+      }
+    } catch (err) {
+      fallo = `Se han pasado ${pasadas} de ${citas.length}. El resto sigue en el panel; vuelve a pulsar para reintentar. (${err.message})`;
+    }
+    await cargarCalendario();
+    calendarioError = fallo || calendarioError; // después de recargar, para que el aviso no se borre
+    pintarAgendaGoogle();
   }
 
   const horaLocal = (fecha, hora) => `${fecha}T${hora}:00`;
@@ -1646,6 +1674,11 @@
       }
       menu.append(resumen, lista);
       caja.append(menu);
+      const viejas = citasSoloPanel().length;
+      if (viejas && calendariosEscribibles().length) {
+        caja.append(el('p', 'agenda-viejas', `${viejas === 1 ? 'Tienes 1 cita apuntada' : `Tienes ${viejas} citas apuntadas`} solo en el panel.`),
+          boton('Pasarlas a Google Calendar', pasarCitasViejas));
+      }
       if (!permisoCalendar()) caja.append(boton('Actualizar calendario', pedirToken));
     } else if (permisoCalendar()) {
       caja.append(el('p', null, 'Cargando tus calendarios…'));
