@@ -547,7 +547,6 @@
       <button type="button" class="boton" id="copia-guardar">Guardar copia</button>
       <button type="button" class="boton" id="copia-cargar">Cargar copia</button>
       <input type="file" id="copia-archivo" accept=".json,application/json" hidden>
-      <button type="button" class="boton boton--peligro" id="ejemplo-borrar" hidden>Borrar datos de ejemplo</button>
     </div>
     <p class="pie-aviso" id="pie-aviso" role="status"></p>
   </footer>
@@ -571,69 +570,6 @@
   const masDias = (n) => { const d = new Date(ahora); d.setDate(d.getDate() + n); return diaISO(d); };
   const hoy = diaISO(ahora);
 
-  function datosDeEjemplo() {
-    return {
-      ejemplo: true,
-      agenda: [
-        { id: 'e1', titulo: 'Café con Laura', fecha: hoy, hora: '09:30', lugar: 'Café Central' },
-        { id: 'e2', titulo: 'Clase de yoga', fecha: hoy, hora: '18:00', lugar: 'Gimnasio del barrio' },
-        { id: 'e3', titulo: 'Comida familiar', fecha: masDias(1), hora: '14:00', lugar: 'Casa de mis padres' },
-        { id: 'e4', titulo: 'Reunión de equipo', fecha: masDias(2), hora: '09:00', lugar: '' },
-        { id: 'e5', titulo: 'Dentista', fecha: masDias(3), hora: '17:15', lugar: 'Clínica dental' },
-        { id: 'e6', titulo: 'Cumpleaños de Marta', fecha: masDias(5), hora: '', lugar: '' },
-      ],
-      vence: [
-        { id: 'v1', titulo: 'Devolver libro a la biblioteca', fecha: masDias(-1), importe: null },
-        { id: 'v2', titulo: 'Recibo de la luz', fecha: masDias(2), importe: 68.4 },
-        { id: 'v3', titulo: 'ITV del coche', fecha: masDias(4), importe: 41.6 },
-        { id: 'v4', titulo: 'IBI (contribución)', fecha: masDias(9), importe: 412.35 },
-        { id: 'v5', titulo: 'Seguro del coche', fecha: masDias(21), importe: 389 },
-        { id: 'v6', titulo: 'Renovar el DNI', fecha: masDias(48), importe: 12 },
-      ],
-      dinero: [
-        ['ingreso', 'Nómina', 2450, 'Ingresos', 1],
-        ['gasto', 'Alquiler', 850, 'Casa', 1],
-        ['gasto', 'Supermercado', 86.4, 'Comida', 2],
-        ['gasto', 'Gasolina', 60, 'Transporte', 4],
-        ['gasto', 'Supermercado', 54.2, 'Comida', 7],
-        ['gasto', 'Cena con amigos', 45.5, 'Ocio', 8],
-        ['gasto', 'Farmacia', 18.9, 'Salud', 10],
-        ['gasto', 'Zapatillas', 79.99, 'Compras', 11],
-        ['gasto', 'Supermercado', 112.75, 'Comida', 13],
-        ['gasto', 'Cine', 19, 'Ocio', 14],
-      ].map(([tipo, concepto, importe, categoria, dia], i) => ({
-        id: 'd' + i, tipo, concepto, importe, categoria,
-        fecha: diaISO(new Date(ahora.getFullYear(), ahora.getMonth(), Math.min(dia, ahora.getDate()))),
-      })),
-      suscripciones: [
-        { id: 's1', nombre: 'Gimnasio', importe: 39.9, periodo: 'mensual', fecha: masDias(17) },
-        { id: 's2', nombre: 'Netflix', importe: 13.99, periodo: 'mensual', fecha: masDias(6) },
-        { id: 's3', nombre: 'Spotify', importe: 11.99, periodo: 'mensual', fecha: masDias(12) },
-        { id: 's4', nombre: 'Amazon Prime', importe: 49.9, periodo: 'anual', fecha: masDias(90) },
-        { id: 's5', nombre: 'iCloud', importe: 2.99, periodo: 'mensual', fecha: masDias(1) },
-      ],
-      // Patrón de días hechos (1) en las últimas 3 semanas, del más antiguo a hoy.
-      habitos: [
-        ['h1', 'Leer 20 minutos', '101101111011011111110'],
-        ['h2', 'Caminar 30 minutos', '110110100111011010110'],
-        ['h3', 'Meditar', '000100110010011101111'],
-        ['h4', 'Sin pantallas antes de dormir', '100010011000110101000'],
-      ].map(([id, nombre, patron]) => ({
-        id, nombre, hechos: [...patron].flatMap((c, i) => (c === '1' ? [masDias(i - patron.length + 1)] : [])),
-      })),
-      compra: [
-        ['c1', 'Plátanos', '1 kg', 'Fruta y verdura', false, 'mercadona'],
-        ['c2', 'Tomates', '6', 'Fruta y verdura', false, 'mercadona'],
-        ['c3', 'Pechuga de pollo', '500 g', 'Carne y pescado', false, 'lidl'],
-        ['c4', 'Leche', '6 l', 'Lácteos y huevos', false, 'aldi'],
-        ['c5', 'Huevos', '12', 'Lácteos y huevos', true, 'aldi'],
-        ['c6', 'Pan de molde', '', 'Panadería', false, 'cualquiera'],
-        ['c7', 'Aceite de oliva', '1 l', 'Despensa', false, 'mercadona'],
-        ['c8', 'Arroz', '', 'Despensa', true, 'lidl'],
-        ['c9', 'Detergente', '', 'Limpieza y hogar', false, 'aldi'],
-      ].map(([id, nombre, cantidad, seccion, comprado, tienda]) => ({ id, nombre, cantidad, seccion, comprado, tienda })),
-    };
-  }
   function cargar() {
     try { return JSON.parse(localStorage.getItem(CLAVE)); } catch { return null; }
   }
@@ -645,14 +581,13 @@
   function guardar() { guardarLocal(); programarSincronizacion(); }
   // Completa los apartados que falten (datos guardados con una versión anterior del panel).
   function completar(d) {
-    const ej = d.ejemplo ? datosDeEjemplo() : {};
     for (const [clave, vacio] of [['agenda', []], ['vence', []], ['dinero', []], ['suscripciones', []], ['habitos', []], ['compra', []], ['archivos', []]]) {
-      if (!d[clave] || typeof d[clave] !== 'object') d[clave] = ej[clave] || vacio;
+      if (!d[clave] || typeof d[clave] !== 'object') d[clave] = vacio;
     }
     delete d.salud; // el apartado de salud se quitó el 15/11/2026
     return d;
   }
-  const datos = completar(cargar() || datosDeEjemplo());
+  const datos = completar(cargar() || {}); // sin datos de ejemplo: el panel empieza vacío
 
   // Euros con formato español: 1.234,56 €
   const fmtEuros = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', useGrouping: 'always' });
@@ -1256,13 +1191,12 @@
   function pintarTodo() { pintarAgenda(); pintarVence(); pintarDinero(); pintarSuscripciones(); pintarHabitos(); pintarCompra(); pintarArchivos(); }
   pintarTodo();
 
-  // ---------- Copia de seguridad y datos de ejemplo ----------
+  // ---------- Copia de seguridad ----------
   const aviso = document.getElementById('pie-aviso');
   const avisar = (texto, mal = false) => { aviso.textContent = texto; aviso.classList.toggle('mal', mal); };
   const fechaCorta = (d) => new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   function pintarPie() {
-    document.getElementById('ejemplo-borrar').hidden = !datos.ejemplo;
     document.getElementById('pie-texto').textContent =
       (leerDrive()?.archivoId
         ? 'Vuestros datos se guardan en este dispositivo y en vuestra carpeta «Panel de vida» de Google Drive. '
@@ -1309,12 +1243,8 @@
     for (const k of ['agenda', 'vence', 'dinero', 'suscripciones', 'habitos', 'compra', 'archivos']) datos[k] = datos[k].filter((x) => !ID_EJEMPLO.test(x.id));
     datos.ejemplo = false;
   }
-  document.getElementById('ejemplo-borrar').addEventListener('click', () => {
-    if (!confirm('¿Borrar todos los datos de ejemplo? Lo que hayas añadido tú se queda.')) return;
-    quitarEjemplos();
-    guardar(); pintarTodo(); pintarPie();
-    avisar('Datos de ejemplo borrados. El panel es todo tuyo.');
-  });
+  // Los paneles que aún tenían los datos de ejemplo de la primera versión se limpian solos (lo tuyo se queda)
+  if (datos.ejemplo) { quitarEjemplos(); guardarLocal(); pintarTodo(); }
 
   // ---------- Datos compartidos en Google Drive ----------
   // Un archivo «panel-de-vida-datos.json» dentro de la carpeta «Panel de vida» del primero que la crea,
@@ -1540,7 +1470,7 @@
       const botones = el('div', 'pie-botones');
       botones.append(
         accion('Crear carpeta compartida', async () => {
-          if (!confirm('Se creará la carpeta «Panel de vida» en tu Google Drive con tus datos (sin los de ejemplo). ¿Seguir?')) return;
+          if (!confirm('Se creará la carpeta «Panel de vida» en tu Google Drive con tus datos. ¿Seguir?')) return;
           await crearCompartido(); avisar('Carpeta creada en tu Drive. Ahora compártela con tu pareja.');
         }, true),
         accion('Usar la que me han compartido', unirseCompartido),
