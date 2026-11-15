@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#000000">
-<!-- Privacidad: este panel no se conecta a internet ni envía nada. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'self'; form-action 'none'">
+<!-- Privacidad: lo único externo permitido es Google (entrar con vuestra cuenta). Nada más se conecta a ningún sitio. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://accounts.google.com; script-src 'unsafe-inline' https://accounts.google.com/gsi/client; frame-src https://accounts.google.com; img-src data: 'self' https://*.googleusercontent.com; manifest-src 'self'; worker-src 'self'; connect-src 'self' https://accounts.google.com; form-action 'none'">
 <title>Panel de vida</title>
 <!-- App instalable: ficha, icono y nombre en la pantalla de inicio -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -52,7 +52,15 @@
     padding: max(28px, env(safe-area-inset-top)) max(var(--hueco), env(safe-area-inset-right)) 48px max(var(--hueco), env(safe-area-inset-left));
   }
 
-  .cabecera { margin-bottom: 28px; }
+  .cabecera { margin-bottom: 28px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  /* Cuenta de Google: arriba a la derecha */
+  .cuenta { display: flex; align-items: center; gap: 10px; min-height: 40px; flex: none; }
+  .cuenta img { width: 36px; height: 36px; border-radius: 50%; background: var(--tarjeta-2); }
+  .cuenta-nombre { font-size: 15px; font-weight: 600; line-height: 1.2; }
+  .cuenta-nombre small { display: block; font-size: 12px; font-weight: 500; color: var(--texto-2); }
+  .cuenta .boton-texto { --color: var(--texto-2); font-size: 14px; }
+  .cuenta-aviso { margin: 0; font-size: 13px; color: var(--texto-2); max-width: 22ch; text-align: right; }
+  @media (max-width: 600px) { .cuenta-nombre { display: none; } }
   .fecha {
     margin: 0 0 2px;
     color: var(--texto-2);
@@ -297,8 +305,11 @@
 <body>
 <main class="pagina">
   <header class="cabecera">
-    <p class="fecha" id="fecha">&nbsp;</p>
-    <h1 class="saludo" id="saludo">Hola</h1>
+    <div>
+      <p class="fecha" id="fecha">&nbsp;</p>
+      <h1 class="saludo" id="saludo">Hola</h1>
+    </div>
+    <div class="cuenta" id="cuenta" aria-live="polite"></div>
   </header>
 
   <div class="rejilla">
@@ -432,8 +443,10 @@
   const fecha = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(ahora);
   document.getElementById('fecha').textContent = fecha.charAt(0).toUpperCase() + fecha.slice(1);
   const h = ahora.getHours();
-  document.getElementById('saludo').textContent =
-    h >= 6 && h < 14 ? 'Buenos días' : h >= 14 && h < 21 ? 'Buenas tardes' : 'Buenas noches';
+  const saludoBase = h >= 6 && h < 14 ? 'Buenos días' : h >= 14 && h < 21 ? 'Buenas tardes' : 'Buenas noches';
+  // Con sesión iniciada, el saludo lleva el nombre de pila: «Buenos días, Ricard»
+  const pintarSaludo = (nombre) => { document.getElementById('saludo').textContent = nombre ? `${saludoBase}, ${nombre}` : saludoBase; };
+  pintarSaludo();
 
   // ---------- Datos: solo en este navegador (localStorage), nunca salen de aquí ----------
   const CLAVE = 'panel-de-vida';
@@ -1084,6 +1097,71 @@
   });
 
   pintarPie();
+
+  // ---------- Entrar con Google: cada uno con su cuenta ----------
+  // Solo funciona con el panel publicado (Google no acepta páginas abiertas con doble clic).
+  const CLIENTE_GOOGLE = '786823678377-ffdiajgej160p2kkomiqnh8illckbj8q.apps.googleusercontent.com';
+  const CLAVE_SESION = 'panel-sesion';
+  let sesion = null;
+  try { sesion = JSON.parse(localStorage.getItem(CLAVE_SESION)); } catch { sesion = null; }
+
+  // Lee los datos de la credencial que devuelve Google (nombre, email, foto). Solo para mostrarlos.
+  function leerCredencial(token) {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))));
+  }
+
+  function pintarCuenta() {
+    const caja = document.getElementById('cuenta');
+    caja.replaceChildren();
+    pintarSaludo(sesion?.nombre);
+    if (sesion) {
+      const foto = el('img');
+      foto.alt = '';
+      foto.referrerPolicy = 'no-referrer';
+      if (sesion.foto) foto.src = sesion.foto;
+      const nombre = el('span', 'cuenta-nombre', sesion.nombreCompleto || sesion.nombre);
+      nombre.append(el('small', null, sesion.email));
+      const salir = el('button', 'boton-texto', 'Salir');
+      salir.type = 'button';
+      salir.addEventListener('click', () => {
+        window.google?.accounts.id.disableAutoSelect();
+        sesion = null;
+        try { localStorage.removeItem(CLAVE_SESION); } catch { /* nada que borrar */ }
+        pintarCuenta();
+      });
+      caja.append(foto, nombre, salir);
+    } else if (window.google?.accounts?.id) {
+      const boton = el('div');
+      caja.append(boton);
+      // En el móvil, solo el icono redondo de Google para no apretar el saludo
+      const movil = matchMedia('(max-width: 600px)').matches;
+      google.accounts.id.renderButton(boton, { type: movil ? 'icon' : 'standard', theme: 'filled_black', shape: movil ? 'circle' : 'pill', size: 'large', text: 'signin_with', locale: 'es_ES' });
+    }
+  }
+
+  function alEntrar(respuesta) {
+    const d = leerCredencial(respuesta.credential);
+    sesion = { nombre: d.given_name || d.name, nombreCompleto: d.name, email: d.email, foto: d.picture };
+    try { localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion)); } catch { /* sin guardar: habrá que entrar otra vez */ }
+    pintarCuenta();
+  }
+
+  pintarCuenta();
+  if (location.protocol.startsWith('http')) {
+    const gsi = document.createElement('script');
+    gsi.src = 'https://accounts.google.com/gsi/client?hl=es';
+    gsi.async = true;
+    gsi.onload = () => {
+      google.accounts.id.initialize({ client_id: CLIENTE_GOOGLE, callback: alEntrar, auto_select: true, use_fedcm_for_prompt: true });
+      pintarCuenta();
+      if (!sesion) google.accounts.id.prompt(); // si ya entraste antes en este móvil, entra solo
+    };
+    gsi.onerror = () => {
+      if (!sesion) document.getElementById('cuenta').replaceChildren(el('p', 'cuenta-aviso', 'Sin conexión con Google: no se puede entrar ahora.'));
+    };
+    document.head.append(gsi);
+  }
 
   // App instalable y sin conexión: solo funciona cuando el panel está publicado en internet (no al abrirlo con doble clic).
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
