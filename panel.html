@@ -252,11 +252,11 @@
     border: 1px solid var(--linea); border-radius: 10px; padding: 9px 10px; width: 100%; color-scheme: dark;
   }
   .formulario select:focus-visible { outline: 2px solid var(--color); outline-offset: 1px; }
-  .cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 16px; }
+  .cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 16px; container-type: inline-size; }
   .cifras div { padding: 0 0 0 12px; border-left: 1px solid var(--linea); min-width: 0; }
   .cifras div:first-child { border-left: 0; padding-left: 0; }
   .cifras dt { font-size: 12px; font-weight: 600; color: var(--texto-2); }
-  .cifras dd { margin: 0; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cifras dd { margin: 0; font-size: clamp(11px, 4.4cqi, 17px); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cifras .positivo { color: var(--dinero); }
   .cifras .negativo { color: #ff6961; }
   .subtitulo { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--texto-2); }
@@ -749,8 +749,8 @@
   }
 
   // ---------- Dinero del mes ----------
-  const CATEGORIAS_GASTO = ['Casa', 'Comida', 'Transporte', 'Ocio', 'Salud', 'Compras', 'Otros'];
-  const CATEGORIAS_INGRESO = ['Ingresos', 'Otros'];
+  const CATEGORIAS_GASTO = ['Casa', 'Préstamo e hipoteca', 'Comida', 'Restaurantes', 'Transporte', 'Ocio', 'Salud', 'Compras', 'Mascotas', 'Inversión', 'Otros'];
+  const CATEGORIAS_INGRESO = ['Nómina', 'Paga extra y bonus', 'Intereses', 'Otros'];
   const mesActual = hoy.slice(0, 7);
   const nombreMes = new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(ahora);
   document.getElementById('dinero-titulo').textContent = `Dinero de ${nombreMes}`;
