@@ -121,6 +121,16 @@
   /* Formularios */
   .formulario { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; background: var(--tarjeta-2); border-radius: 14px; }
   .formulario[hidden], .formulario label[hidden] { display: none; }
+  /* Cambiar de mes en «Dinero» */
+  .mes-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px 0 12px; }
+  .mes-nombre { display: inline-block; font-size: 14px; font-weight: 600; color: var(--texto-2); }
+  .mes-nombre::first-letter { text-transform: uppercase; }
+  .mes-flecha {
+    width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; font: inherit; font-size: 22px; line-height: 1;
+    color: var(--color); background: var(--tarjeta-2); border: 0; border-radius: 50%;
+  }
+  .mes-flecha:disabled { opacity: .3; cursor: default; }
+
   /* Importar movimientos del banco */
   .importar-aviso { margin: 0 0 12px; font-size: 14px; color: var(--dinero); }
   .importar-aviso.error { color: #ff6961; }
@@ -150,7 +160,23 @@
   .importar-nocuentan .importar-lista { padding: 0; }
   .importar-nota { margin: 4px 0; font-size: 13px; color: var(--texto-2); }
   .importar-pie { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--linea); }
+  .movs-filtros { display: grid; grid-template-columns: 1fr 200px; gap: 8px; padding: 0 20px 10px; }
+  .movs-filtros input, .movs-filtros select {
+    font: inherit; font-size: 15px; color: var(--texto); background: var(--tarjeta-2); border: 1px solid var(--linea);
+    border-radius: 10px; padding: 8px 10px; min-width: 0; width: 100%; color-scheme: dark;
+  }
+  .movs-fila { display: block; padding: 0; }
+  .movs-abrir {
+    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; width: 100%; padding: 10px 0;
+    font: inherit; color: inherit; text-align: left; background: none; border: 0; cursor: pointer;
+  }
+  .movs-abrir:hover b { color: var(--color); }
+  .movs-editar { padding: 10px 0; border-top: 1px solid var(--linea); }
+  .movs-editar .formulario { margin: 0; }
+  .movimientos .acciones { flex-wrap: wrap; }
+  .movimientos [data-borrar] { margin-right: auto; }
   @media (max-width: 600px) {
+    .movs-filtros { grid-template-columns: 1fr; }
     .importar { width: 100%; max-width: none; max-height: 100dvh; height: 100dvh; border-radius: 0; margin: 0; }
     .importar-fila { grid-template-columns: 1fr auto; }
     .importar-fila select { grid-column: 1 / -1; }
@@ -792,15 +818,29 @@
   const CATEGORIAS_GASTO = ['Casa', 'Préstamo e hipoteca', 'Comida', 'Restaurantes', 'Transporte', 'Ocio', 'Salud', 'Compras', 'Mascotas', 'Inversión', 'Otros'];
   const CATEGORIAS_INGRESO = ['Nómina', 'Paga extra y bonus', 'Intereses', 'Otros'];
   const mesActual = hoy.slice(0, 7);
-  const nombreMes = new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(ahora);
-  document.getElementById('dinero-titulo').textContent = `Dinero de ${nombreMes}`;
+  let mesVisto = mesActual; // el mes que se está mirando (con las flechas se va a los anteriores)
+  const fmtMesLargo = new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' });
+  const fechaDeMes = (mes) => new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)) - 1, 1);
+  const nombreDelMes = (mes) => fmtMesLargo.format(fechaDeMes(mes)).replace(' de ' + ahora.getFullYear(), ''); // el año solo si no es este
+  function moverMes(paso) { const d = fechaDeMes(mesVisto); d.setMonth(d.getMonth() + paso); mesVisto = diaISO(d).slice(0, 7); pintarDinero(); }
   const fmtDiaCorto = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
 
   function pintarDinero() {
     const caja = document.getElementById('dinero-contenido');
     caja.replaceChildren();
-    const delMes = datos.dinero.filter((m) => m.fecha.startsWith(mesActual));
-    if (!delMes.length) { caja.append(el('p', 'vacio', `Aún no has apuntado nada en ${nombreMes}.`)); return; }
+    const nombreMes = nombreDelMes(mesVisto);
+    document.getElementById('dinero-titulo').textContent = `Dinero de ${nombreMes}`;
+    const nav = el('div', 'mes-nav');
+    const flecha = (texto, etiqueta, paso, apagada) => {
+      const b = el('button', 'mes-flecha', texto);
+      b.type = 'button'; b.setAttribute('aria-label', etiqueta); b.disabled = apagada;
+      b.addEventListener('click', () => moverMes(paso));
+      return b;
+    };
+    nav.append(flecha('‹', 'Mes anterior', -1, false), el('span', 'mes-nombre', nombreMes), flecha('›', 'Mes siguiente', 1, mesVisto >= mesActual));
+    caja.append(nav);
+    const delMes = datos.dinero.filter((m) => m.fecha.startsWith(mesVisto));
+    if (!delMes.length) { caja.append(el('p', 'vacio', `No hay nada apuntado en ${nombreMes}.`)); return; }
 
     const suma = (tipo) => delMes.filter((m) => m.tipo === tipo).reduce((s, m) => s + m.importe, 0);
     const ingresos = suma('ingreso'), gastos = suma('gasto'), queda = ingresos - gastos;
@@ -856,6 +896,116 @@
       lista.append(li);
     }
     caja.append(lista);
+    const todos = el('button', 'boton-texto', `Ver y editar todos (${delMes.length})`);
+    todos.type = 'button';
+    todos.addEventListener('click', abrirMovimientos);
+    caja.append(todos);
+  }
+
+  // ---------- Todos los movimientos del mes: buscar, filtrar, editar y borrar ----------
+  function abrirMovimientos() {
+    const dialogo = el('dialog', 'importar movimientos');
+    dialogo.setAttribute('aria-labelledby', 'movs-titulo');
+    const cabeza = el('h2', null, `Movimientos de ${nombreDelMes(mesVisto)}`); cabeza.id = 'movs-titulo';
+    const filtros = el('div', 'movs-filtros');
+    const buscar = el('input'); buscar.type = 'search'; buscar.placeholder = 'Buscar…'; buscar.setAttribute('aria-label', 'Buscar movimiento');
+    const filtro = el('select'); filtro.setAttribute('aria-label', 'Filtrar por categoría');
+    filtro.append(new Option('Todas las categorías', ''), ...[...new Set([...CATEGORIAS_GASTO, ...CATEGORIAS_INGRESO])].map((c) => new Option(c, c)));
+    filtros.append(buscar, filtro);
+    const resumen = el('p', 'importar-resumen');
+    const lista = el('ul', 'importar-lista');
+    let abierto = null; // el movimiento que se está editando
+
+    function pintar() {
+      const q = sinAcentos(buscar.value.trim());
+      const delMes = datos.dinero.filter((m) => m.fecha.startsWith(mesVisto)
+        && (!filtro.value || m.categoria === filtro.value) && (!q || sinAcentos(m.concepto).includes(q)))
+        .sort((a, b) => b.fecha.localeCompare(a.fecha));
+      const total = (tipo) => delMes.filter((m) => m.tipo === tipo).reduce((s, m) => s + m.importe, 0);
+      resumen.textContent = `${delMes.length} movimientos · gastos ${euros(total('gasto'))} · ingresos ${euros(total('ingreso'))}`;
+      lista.replaceChildren(...delMes.map((m) => (m.id === abierto ? formulario(m) : fila(m))));
+      if (!delMes.length) lista.append(el('li', 'vacio', 'No hay movimientos con ese filtro.'));
+    }
+    function fila(m) {
+      const li = el('li', 'importar-fila movs-fila');
+      const boton = el('button', 'movs-abrir');
+      boton.type = 'button';
+      boton.setAttribute('aria-label', `Editar «${m.concepto}»`);
+      const [a, mes, d] = m.fecha.split('-');
+      const texto = el('span', 'importar-texto');
+      texto.append(el('b', null, m.concepto), el('span', null, `${d}/${mes}/${a} · ${m.categoria}`));
+      const suma = m.tipo === 'ingreso' || m.importe < 0;
+      boton.append(texto, el('span', 'importar-importe' + (suma ? ' ingreso' : ''), (suma ? '+' : '−') + euros(Math.abs(m.importe))));
+      boton.addEventListener('click', () => {
+        abierto = m.id; pintar();
+        const editar = lista.querySelector('.movs-editar');
+        editar.scrollIntoView({ block: 'nearest' });
+        editar.querySelector('input').focus({ preventScroll: true });
+      });
+      li.append(boton);
+      return li;
+    }
+    function formulario(m) {
+      const li = el('li', 'movs-editar');
+      const f = el('form', 'formulario');
+      f.noValidate = true;
+      f.innerHTML = `<label>Concepto<input name="concepto" maxlength="60"></label>
+        <div class="fila"><label>Importe en €<input name="importe" inputmode="decimal"></label><label>Día<input name="fecha" type="date"></label></div>
+        <label>Categoría<select name="categoria"></select></label>
+        <p class="error" role="alert" hidden></p>
+        <div class="acciones"><button type="button" class="boton boton--peligro" data-borrar>Borrar</button>
+        <button type="button" class="boton" data-cancelar>Cancelar</button><button type="submit" class="boton boton--principal">Guardar</button></div>`;
+      f.concepto.value = m.concepto;
+      f.importe.value = Math.abs(m.importe).toFixed(2).replace('.', ',');
+      f.fecha.value = m.fecha;
+      f.categoria.append(...[...(m.tipo === 'ingreso' ? CATEGORIAS_INGRESO : CATEGORIAS_GASTO), NO_CUENTA].map((c) => new Option(c, c)));
+      f.categoria.value = m.categoria;
+      const error = f.querySelector('.error');
+      f.querySelector('[data-cancelar]').addEventListener('click', () => { abierto = null; pintar(); });
+      f.querySelector('[data-borrar]').addEventListener('click', () => {
+        if (!confirm(`¿Borrar «${m.concepto}» (${euros(Math.abs(m.importe))})?`)) return;
+        datos.dinero = datos.dinero.filter((x) => x.id !== m.id);
+        abierto = null; guardar(); pintar(); pintarDinero();
+      });
+      f.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const concepto = f.concepto.value.trim();
+        const importe = leerImporte(f.importe.value);
+        if (!concepto) { error.textContent = 'Escribe el concepto.'; error.hidden = false; return; }
+        if (importe == null || Number.isNaN(importe) || importe === 0) { error.textContent = 'Escribe el importe, por ejemplo: 25,90'; error.hidden = false; return; }
+        if (!f.fecha.value) { error.textContent = 'Elige el día.'; error.hidden = false; return; }
+        const categoria = f.categoria.value;
+        // ¿Hay más del mismo comercio o persona con otra categoría? Se pregunta si cambiarlos y recordarlo
+        const palabra = palabraClave(m.concepto);
+        const otros = categoria === m.categoria || !palabra ? [] : datos.dinero.filter((x) => x.id !== m.id && x.tipo === m.tipo
+          && x.categoria !== categoria && palabrasDe(x.concepto).includes(palabra));
+        const aTodos = otros.length > 0 && confirm(`Hay ${otros.length} movimiento${otros.length === 1 ? '' : 's'} más de «${m.concepto}». ¿Cambiarlo${otros.length === 1 ? '' : 's'} también a «${categoria}» y recordarlo para las próximas importaciones?`);
+        Object.assign(m, { concepto, importe: Math.abs(importe) * Math.sign(m.importe), fecha: f.fecha.value, categoria });
+        if (aTodos) {
+          for (const x of otros) x.categoria = categoria;
+          datos.reglas = datos.reglas.filter((r) => r.palabra !== palabra);
+          datos.reglas.push({ id: 'r-' + palabra, palabra, categoria });
+        }
+        // «No cuenta»: traspasos que no son gasto ni ingreso; se quitan de la lista
+        datos.dinero = datos.dinero.filter((x) => x.categoria !== NO_CUENTA);
+        abierto = null; guardar(); pintar(); pintarDinero();
+      });
+      li.append(f);
+      return li;
+    }
+
+    buscar.addEventListener('input', pintar);
+    filtro.addEventListener('change', pintar);
+    const cerrar = el('button', 'boton', 'Cerrar');
+    cerrar.type = 'button';
+    cerrar.addEventListener('click', () => dialogo.close());
+    const pie = el('div', 'importar-pie');
+    pie.append(cerrar);
+    dialogo.append(cabeza, filtros, resumen, lista, pie);
+    dialogo.addEventListener('close', () => dialogo.remove());
+    pintar();
+    document.body.append(dialogo);
+    dialogo.showModal();
   }
 
   // El desplegable de categorías cambia según sea gasto o ingreso
