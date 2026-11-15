@@ -120,6 +120,12 @@
   /* Formularios */
   .formulario { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; background: var(--tarjeta-2); border-radius: 14px; }
   .formulario[hidden] { display: none; }
+  .duraciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -2px; }
+  .duracion {
+    font: inherit; font-size: 14px; font-weight: 600; color: var(--color); cursor: pointer; min-height: 34px;
+    padding: 6px 12px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--color) 45%, transparent); background: none;
+  }
+  .duracion:hover { background: color-mix(in srgb, var(--color) 15%, transparent); }
   .formulario .fila { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
   .formulario label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--texto-2); }
   .formulario input {
@@ -154,14 +160,25 @@
   .agenda-google { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 14px; color: var(--texto-2); }
   .agenda-google:empty { display: none; }
   .agenda-google p { margin: 0; }
-  .cal-boton {
-    display: inline-flex; align-items: center; gap: 7px; min-height: 34px; max-width: 100%; padding: 6px 12px; cursor: pointer;
-    font: inherit; font-size: 14px; font-weight: 600; color: var(--texto-2); overflow-wrap: anywhere; text-align: left;
-    background: none; border: 1px solid var(--linea); border-radius: 999px;
+  .cal-menu { position: relative; }
+  .cal-resumen {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 12px; cursor: pointer; list-style: none;
+    font-size: 14px; font-weight: 600; color: var(--texto); border: 1px solid var(--linea); border-radius: 999px; background: var(--tarjeta-2);
   }
-  .cal-punto { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--cal); }
-  .cal-boton[aria-pressed="true"] { color: var(--texto); background: color-mix(in srgb, var(--cal) 20%, transparent); border-color: color-mix(in srgb, var(--cal) 55%, transparent); }
-  .cal-boton[aria-pressed="true"] .cal-punto { background: var(--cal); }
+  .cal-resumen::-webkit-details-marker { display: none; }
+  .cal-resumen::after { content: ''; width: 7px; height: 7px; border: solid var(--texto-2); border-width: 0 2px 2px 0; transform: translateY(-2px) rotate(45deg); }
+  .cal-menu[open] .cal-resumen::after { transform: translateY(2px) rotate(225deg); }
+  .cal-puntos { display: inline-flex; }
+  .cal-puntos .cal-punto + .cal-punto { margin-left: -3px; }
+  .cal-punto { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--cal); box-shadow: 0 0 0 2px var(--tarjeta-2); }
+  .cal-lista {
+    position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; min-width: 240px; max-width: min(340px, calc(100vw - 48px));
+    padding: 6px; background: var(--tarjeta-2); border: 1px solid var(--linea); border-radius: 14px; box-shadow: 0 12px 32px rgb(0 0 0 / .5);
+  }
+  .cal-opcion { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border-radius: 10px; cursor: pointer; color: var(--texto); font-size: 15px; }
+  .cal-opcion:hover { background: color-mix(in srgb, var(--texto) 8%, transparent); }
+  .cal-opcion input { width: 18px; height: 18px; margin: 0; accent-color: var(--cal); flex: none; }
+  .cal-nombre { overflow-wrap: anywhere; }
   .evento-titulo { display: block; font-weight: 600; overflow-wrap: anywhere; }
   .evento-lugar { display: block; font-size: 14px; color: var(--texto-2); overflow-wrap: anywhere; }
   .evento--pasado { opacity: .7; }
@@ -362,6 +379,11 @@
         <div class="fila">
           <label>Hora (opcional)<input name="hora" type="time"></label>
           <label>Hasta (opcional)<input name="hasta" type="time"></label>
+        </div>
+        <div class="duraciones" role="group" aria-label="Duración">
+          <button type="button" class="duracion" data-minutos="30">30 min</button>
+          <button type="button" class="duracion" data-minutos="60">1 h</button>
+          <button type="button" class="duracion" data-minutos="90">1 h 30 min</button>
         </div>
         <label>Dónde (opcional)<input name="lugar" maxlength="80"></label>
         <label id="agenda-cal" hidden>Calendario<select name="calendario"></select></label>
@@ -970,6 +992,19 @@
     });
   }
 
+  // Duración rápida: rellena «Hasta» a partir de la hora (sin pasar de medianoche)
+  for (const b of document.querySelectorAll('#agenda-form .duracion')) {
+    b.addEventListener('click', () => {
+      const f = document.getElementById('agenda-form');
+      const error = document.getElementById('agenda-error');
+      if (!f.hora.value) { error.textContent = 'Pon primero la hora de inicio.'; error.hidden = false; f.hora.focus(); return; }
+      const [h, m] = f.hora.value.split(':').map(Number);
+      const fin = Math.min(h * 60 + m + Number(b.dataset.minutos), 23 * 60 + 59);
+      f.hasta.value = `${String(Math.floor(fin / 60)).padStart(2, '0')}:${String(fin % 60).padStart(2, '0')}`;
+      error.hidden = true;
+    });
+  }
+
   montarFormulario('agenda', (f) => { f.fecha.value = hoy; rellenarCalendarios(f); }, (f) => {
     const titulo = f.titulo.value.trim();
     if (!titulo) return ['Escribe qué es la cita.', f.titulo];
@@ -1428,7 +1463,12 @@
   // La lista y las citas se guardan en este dispositivo (para verlas sin conexión); nada de esto va en el código público.
   const CALENDAR = 'https://www.googleapis.com/calendar/v3/';
   const CLAVE_CALENDARIO = 'panel-calendario'; // {calendarios: [{id, nombre, color}], elegidos: [id], eventos, cuenta, actualizado}
-  let calendarioError = '';
+  let calendarioError = '', menuCalendariosAbierto = false;
+  // Tocar fuera del desplegable de calendarios lo cierra
+  document.addEventListener('click', (e) => {
+    const menu = document.querySelector('.cal-menu');
+    if (menu?.open && !menu.contains(e.target)) { menu.open = false; menuCalendariosAbierto = false; }
+  });
 
   // Declarada como función (no const) porque la agenda la usa antes de llegar a este bloque
   function eventosCalendario() {
@@ -1572,15 +1612,30 @@
       return b;
     };
     if (cfg?.calendarios && cfg.cuenta === sesion.email) {
-      for (const c of cfg.calendarios) {
-        const b = el('button', 'cal-boton');
-        b.type = 'button';
-        b.style.setProperty('--cal', c.color);
-        b.setAttribute('aria-pressed', String(cfg.elegidos.includes(c.id)));
-        b.append(el('span', 'cal-punto'), c.nombre);
-        b.addEventListener('click', () => cambiarElegido(c.id));
-        caja.append(b);
+      // Desplegable con una casilla por calendario; se queda abierto mientras marcas varios
+      const menu = el('details', 'cal-menu');
+      menu.open = menuCalendariosAbierto;
+      menu.addEventListener('toggle', () => { menuCalendariosAbierto = menu.open; });
+      const resumen = el('summary', 'cal-resumen');
+      const puntos = el('span', 'cal-puntos');
+      for (const c of cfg.calendarios.filter((x) => cfg.elegidos.includes(x.id))) {
+        const p = el('span', 'cal-punto'); p.style.setProperty('--cal', c.color); puntos.append(p);
       }
+      resumen.append(puntos, `Calendarios · ${cfg.elegidos.length} de ${cfg.calendarios.length}`);
+      const lista = el('div', 'cal-lista');
+      for (const c of cfg.calendarios) {
+        const fila = el('label', 'cal-opcion');
+        const casilla = el('input');
+        casilla.type = 'checkbox';
+        casilla.checked = cfg.elegidos.includes(c.id);
+        casilla.style.setProperty('--cal', c.color);
+        casilla.addEventListener('change', () => cambiarElegido(c.id));
+        const p = el('span', 'cal-punto'); p.style.setProperty('--cal', c.color);
+        fila.append(casilla, p, el('span', 'cal-nombre', c.nombre));
+        lista.append(fila);
+      }
+      menu.append(resumen, lista);
+      caja.append(menu);
       if (!permisoCalendar()) caja.append(boton('Actualizar calendario', pedirToken));
     } else if (permisoCalendar()) {
       caja.append(el('p', null, 'Cargando tus calendarios…'));
