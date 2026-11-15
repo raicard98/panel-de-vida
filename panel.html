@@ -120,7 +120,7 @@
   /* Formularios */
   .formulario { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; background: var(--tarjeta-2); border-radius: 14px; }
   .formulario[hidden] { display: none; }
-  .formulario .fila { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .formulario .fila { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
   .formulario label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--texto-2); }
   .formulario input {
     font: inherit; font-size: 16px; color: var(--texto);
@@ -358,11 +358,13 @@
       </div>
       <form class="formulario" id="agenda-form" hidden novalidate>
         <label>Qué<input name="titulo" maxlength="80" placeholder="Ej.: Dentista" required></label>
+        <label>Día<input name="fecha" type="date" required></label>
         <div class="fila">
-          <label>Día<input name="fecha" type="date" required></label>
           <label>Hora (opcional)<input name="hora" type="time"></label>
+          <label>Hasta (opcional)<input name="hasta" type="time"></label>
         </div>
         <label>Dónde (opcional)<input name="lugar" maxlength="80"></label>
+        <label id="agenda-cal" hidden>Calendario<select name="calendario"></select></label>
         <p class="error" id="agenda-error" role="alert" hidden></p>
         <div class="acciones">
           <button type="button" class="boton" data-cancelar>Cancelar</button>
@@ -657,12 +659,13 @@
         if (c.lugar) texto.append(el('span', 'evento-lugar', c.lugar));
         const punto = el('span', 'evento-punto');
         if (c.color) punto.style.setProperty('--punto', c.color);
-        if (c.cal) { li.append(hora, punto, texto, el('span')); lista.append(li); continue; } // de Google Calendar: se borra allí (de momento)
+        if (c.cal && !c.escribe) { li.append(hora, punto, texto, el('span')); lista.append(li); continue; } // calendario de solo lectura
         const borrar = el('button', 'borrar');
         borrar.type = 'button';
         borrar.innerHTML = icoBorrar;
         borrar.setAttribute('aria-label', `Borrar «${c.titulo}»`);
         borrar.addEventListener('click', () => {
+          if (c.cal) return borrarCitaGoogle(c);
           if (!confirm(`¿Borrar «${c.titulo}» de la agenda?`)) return;
           datos.agenda = datos.agenda.filter((x) => x.id !== c.id);
           guardar(); pintarAgenda();
@@ -967,11 +970,15 @@
     });
   }
 
-  montarFormulario('agenda', (f) => { f.fecha.value = hoy; }, (f) => {
+  montarFormulario('agenda', (f) => { f.fecha.value = hoy; rellenarCalendarios(f); }, (f) => {
     const titulo = f.titulo.value.trim();
     if (!titulo) return ['Escribe qué es la cita.', f.titulo];
     if (!f.fecha.value) return ['Elige el día de la cita.', f.fecha];
-    datos.agenda.push({ id: String(Date.now()), titulo, fecha: f.fecha.value, hora: f.hora.value, lugar: f.lugar.value.trim() });
+    if (f.hasta.value && !f.hora.value) return ['Pon también la hora de inicio, o deja «Hasta» vacío.', f.hora];
+    if (f.hasta.value && f.hasta.value <= f.hora.value) return ['«Hasta» tiene que ser más tarde que la hora.', f.hasta];
+    const cita = { id: String(Date.now()), titulo, fecha: f.fecha.value, hora: f.hora.value, hasta: f.hasta.value, lugar: f.lugar.value.trim() };
+    if (!f.querySelector('#agenda-cal').hidden) { crearCitaGoogle(cita, f.calendario.value); return; } // va a Google Calendar
+    datos.agenda.push(cita);
   });
 
   montarFormulario('vence', () => {}, (f) => {
@@ -1430,12 +1437,15 @@
       const cuenta = JSON.parse(localStorage.getItem('panel-sesion'))?.email;
       if (!cfg?.cuenta || cfg.cuenta !== cuenta) return [];
       const vistos = new Set(); // una cita que está en varios calendarios encendidos sale una vez
-      return (cfg.eventos || []).filter((c) => cfg.elegidos?.includes(c.cal) && !vistos.has(c.id) && vistos.add(c.id));
+      const escribibles = new Set((cfg.calendarios || []).filter((c) => c.escribe).map((c) => c.id));
+      return (cfg.eventos || []).filter((c) => cfg.elegidos?.includes(c.cal) && !vistos.has(c.id) && vistos.add(c.id))
+        .map((c) => ({ ...c, escribe: escribibles.has(c.cal) }));
     } catch { return []; }
   }
 
-  async function llamarCalendar(ruta) {
-    const resp = await fetch(CALENDAR + ruta, { headers: { Authorization: `Bearer ${tokenValido()}` } });
+  async function llamarCalendar(ruta, opciones = {}) {
+    const resp = await fetch(CALENDAR + ruta, { ...opciones, headers: { Authorization: `Bearer ${tokenValido()}`, 'Content-Type': 'application/json' } });
+    if (resp.status === 410 || resp.status === 204) return {}; // 410: ya estaba borrada
     if (resp.status === 401) { escribirJSON(CLAVE_TOKEN, null); throw new Error('Hay que volver a dar permiso a Google.'); }
     if (resp.status === 403) throw new Error('Google no deja ver uno de los calendarios. Revisa que siga compartido contigo.');
     if (resp.status === 404) throw new Error('Uno de los calendarios ya no existe o no está compartido contigo.');
@@ -1464,7 +1474,7 @@
     try {
       const lista = await llamarCalendar('users/me/calendarList?minAccessRole=reader');
       const items = (lista.items || []).sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0)); // el tuyo primero
-      const calendarios = items.map((c) => ({ id: c.id, nombre: c.primary ? 'Tu calendario' : c.summaryOverride || c.summary, color: c.backgroundColor || '#0a84ff' }));
+      const calendarios = items.map((c) => ({ id: c.id, nombre: c.primary ? 'Tu calendario' : c.summaryOverride || c.summary, color: c.backgroundColor || '#0a84ff', escribe: ['owner', 'writer'].includes(c.accessRole) }));
       const previo = leerJSON(CLAVE_CALENDARIO);
       const mismaCuenta = previo?.cuenta === sesion.email;
       // La primera vez se marcan los mismos que tienes encendidos en Google Calendar
@@ -1476,6 +1486,66 @@
       calendarioError = '';
       escribirJSON(CLAVE_CALENDARIO, { ...leerJSON(CLAVE_CALENDARIO), eventos, actualizado: new Date().toISOString() });
     } catch (e) { calendarioError = e.message; }
+    pintarAgenda(); pintarAgendaGoogle();
+  }
+
+  // --- Apuntar y borrar citas en Google Calendar ---
+  function calendariosEscribibles() {
+    const cfg = leerJSON(CLAVE_CALENDARIO);
+    return sesion && cfg?.cuenta === sesion.email ? (cfg.calendarios || []).filter((c) => c.escribe) : [];
+  }
+  // Lista del formulario: empieza en el último usado; si no, en el primero compartido que tengas encendido
+  function rellenarCalendarios(form) {
+    const lista = calendariosEscribibles();
+    form.querySelector('#agenda-cal').hidden = !lista.length;
+    form.calendario.replaceChildren(...lista.map((c) => { const op = el('option', null, c.nombre); op.value = c.id; return op; }));
+    const cfg = leerJSON(CLAVE_CALENDARIO);
+    const compartido = lista.find((c) => c.nombre !== 'Tu calendario' && cfg.elegidos?.includes(c.id));
+    form.calendario.value = lista.some((c) => c.id === cfg?.ultimo) ? cfg.ultimo : (compartido || lista[0])?.id || '';
+  }
+
+  const horaLocal = (fecha, hora) => `${fecha}T${hora}:00`;
+  function cuerpoCita(c) {
+    const zona = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!c.hora) { // todo el día: Google quiere el día siguiente como final
+      const fin = new Date(`${c.fecha}T12:00`); fin.setDate(fin.getDate() + 1);
+      return { summary: c.titulo, location: c.lugar, start: { date: c.fecha }, end: { date: diaISO(fin) } };
+    }
+    let hasta = c.hasta;
+    if (!hasta) { // sin «Hasta», dura una hora (sin pasar de medianoche)
+      const [h, m] = c.hora.split(':').map(Number);
+      hasta = h >= 23 ? '23:59' : `${String(h + 1).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+    return { summary: c.titulo, location: c.lugar, start: { dateTime: horaLocal(c.fecha, c.hora), timeZone: zona }, end: { dateTime: horaLocal(c.fecha, hasta), timeZone: zona } };
+  }
+
+  async function crearCitaGoogle(cita, calId) {
+    try {
+      if (!permisoCalendar()) await pedirToken(); // se llama aún dentro del toque en «Guardar»: Google deja abrir su ventana
+      const cal = calendariosEscribibles().find((c) => c.id === calId);
+      const e = await llamarCalendar(`calendars/${encodeURIComponent(calId)}/events`, { method: 'POST', body: JSON.stringify(cuerpoCita(cita)) });
+      const cfg = leerJSON(CLAVE_CALENDARIO);
+      escribirJSON(CLAVE_CALENDARIO, { ...cfg, ultimo: calId, elegidos: cfg.elegidos.includes(calId) ? cfg.elegidos : [...cfg.elegidos, calId], eventos: [...(cfg.eventos || []), aCita(e, cal)] });
+      calendarioError = '';
+      pintarAgenda(); pintarAgendaGoogle();
+    } catch (err) {
+      // Que no se pierda: se queda apuntada en el panel
+      datos.agenda.push(cita); guardar(); pintarAgenda();
+      calendarioError = `No se pudo guardar en Google Calendar: ${err.message} La he dejado apuntada solo en el panel.`;
+      pintarAgendaGoogle();
+    }
+  }
+
+  async function borrarCitaGoogle(c) {
+    const cal = calendariosEscribibles().find((x) => x.id === c.cal);
+    if (!confirm(`¿Borrar «${c.titulo}» de Google Calendar${cal ? ` (${cal.nombre})` : ''}? Desaparece para todos los que vean ese calendario.`)) return;
+    try {
+      if (!permisoCalendar()) await pedirToken();
+      await llamarCalendar(`calendars/${encodeURIComponent(c.cal)}/events/${encodeURIComponent(c.id.slice(2))}`, { method: 'DELETE' });
+      const cfg = leerJSON(CLAVE_CALENDARIO);
+      escribirJSON(CLAVE_CALENDARIO, { ...cfg, eventos: cfg.eventos.filter((x) => !(x.id === c.id && x.cal === c.cal)) });
+      calendarioError = '';
+    } catch (err) { calendarioError = `No se pudo borrar: ${err.message}`; }
     pintarAgenda(); pintarAgendaGoogle();
   }
 
@@ -1615,6 +1685,12 @@
     const t = aCita({ id: 'x', summary: 'Médico', start: { dateTime: m2.toISOString() } }, { id: 'c1', color: '#f00' });
     const td = aCita({ id: 'y', start: { date: masDias(-1) } }, { id: 'c2', color: '#0f0' });
     console.assert(t.fecha === masDias(2) && t.hora === '09:05' && t.id === 'g-x' && t.cal === 'c1' && t.color === '#f00' && td.fecha === hoy && td.hora === '' && td.titulo === '(Sin título)', 'aCita');
+  }
+  {
+    const todo = cuerpoCita({ titulo: 'A', fecha: '2026-12-31', hora: '', lugar: '' });
+    const una = cuerpoCita({ titulo: 'B', fecha: '2026-03-29', hora: '23:30', hasta: '', lugar: '' });
+    const con = cuerpoCita({ titulo: 'C', fecha: '2026-03-29', hora: '09:00', hasta: '10:15', lugar: 'X' });
+    console.assert(todo.end.date === '2027-01-01' && una.end.dateTime === '2026-03-29T23:59:00' && con.end.dateTime === '2026-03-29T10:15:00' && con.start.dateTime === '2026-03-29T09:00:00', 'cuerpoCita');
   }
   console.assert(racha({ hechos: [masDias(-1), masDias(-2), masDias(-4)] }) === 2 && racha({ hechos: [hoy, masDias(-1)] }) === 2 && racha({ hechos: [] }) === 0, 'racha');
   console.assert(proximoCobro({ fecha: masDias(-30), periodo: 'mensual' }) >= hoy && proximoCobro({ fecha: masDias(5), periodo: 'anual' }) === masDias(5), 'proximoCobro');
